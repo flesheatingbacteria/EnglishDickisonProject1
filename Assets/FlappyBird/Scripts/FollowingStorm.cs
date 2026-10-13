@@ -1,0 +1,106 @@
+using UnityEngine;
+
+namespace FlappyBird
+{
+    // Decorative only: no colliders, damage, or changes to bird physics.
+    public sealed class FollowingStorm : MonoBehaviour
+    {
+        private const float SafeDistance = 1.8f;
+        private FlappyBirdGame game;
+        private Transform[] rain;
+        private GameObject lightning;
+        private Texture2D cloudTexture;
+        private Sprite cloudSprite;
+        private float animationTime;
+
+        public void Initialize(FlappyBirdGame owner, Sprite square)
+        {
+            game = owner;
+            cloudTexture = new Texture2D(64, 64, TextureFormat.RGBA32, false);
+            cloudTexture.filterMode = FilterMode.Bilinear;
+            for (int y = 0; y < 64; y++)
+                for (int x = 0; x < 64; x++)
+                {
+                    float distance = Vector2.Distance(new Vector2(x, y), new Vector2(31.5f, 31.5f));
+                    cloudTexture.SetPixel(x, y, new Color(1, 1, 1, Mathf.Clamp01(31.5f - distance)));
+                }
+            cloudTexture.Apply();
+            cloudSprite = Sprite.Create(cloudTexture, new Rect(0, 0, 64, 64), new Vector2(0.5f, 0.5f), 64);
+            Color dark = new Color(0.22f, 0.25f, 0.34f);
+            Piece("Cloud Base", cloudSprite, new Vector2(0, 0.15f), new Vector2(1.65f, 0.62f), dark, 0);
+            Piece("Cloud Left", cloudSprite, new Vector2(-0.5f, 0.33f), new Vector2(0.68f, 0.67f), dark, 0);
+            Piece("Cloud Crown", cloudSprite, new Vector2(-0.1f, 0.53f), new Vector2(0.88f, 0.82f), dark, 0);
+            Piece("Cloud Right", cloudSprite, new Vector2(0.43f, 0.37f), new Vector2(0.76f, 0.72f), dark, 0);
+
+            rain = new Transform[12];
+            for (int i = 0; i < rain.Length; i++)
+            {
+                rain[i] = Piece("Rain", square, Vector2.zero, new Vector2(0.025f, 0.16f), new Color(0.67f, 0.86f, 1, 0.75f), 1).transform;
+                rain[i].localRotation = Quaternion.Euler(0, 0, -15);
+            }
+            lightning = new GameObject("Lightning");
+            lightning.transform.SetParent(transform, false);
+            Vector2[] points = { new Vector2(0.12f, 0.12f), new Vector2(-0.07f, -0.24f), new Vector2(0.18f, -0.2f), new Vector2(-0.13f, -0.62f) };
+            for (int i = 0; i < points.Length - 1; i++)
+            {
+                Vector2 direction = points[i + 1] - points[i];
+                GameObject segment = Piece("Bolt", square, (points[i] + points[i + 1]) / 2,
+                    new Vector2(0.055f, direction.magnitude), new Color(1, 0.93f, 0.5f), 2);
+                segment.transform.SetParent(lightning.transform, false);
+                segment.transform.localRotation = Quaternion.Euler(0, 0, Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg - 90);
+            }
+            ResetStorm();
+        }
+
+        private GameObject Piece(string label, Sprite sprite, Vector2 position, Vector2 size, Color color, int order)
+        {
+            GameObject piece = new GameObject(label, typeof(SpriteRenderer));
+            piece.transform.SetParent(transform, false);
+            piece.transform.localPosition = position;
+            piece.transform.localScale = new Vector3(size.x, size.y, 1);
+            SpriteRenderer renderer = piece.GetComponent<SpriteRenderer>();
+            renderer.sprite = sprite;
+            renderer.color = color;
+            renderer.sortingOrder = order;
+            return piece;
+        }
+
+        public void ResetStorm()
+        {
+            animationTime = 0;
+            transform.position = game.Bird.transform.position + Vector3.left * SafeDistance;
+            lightning.SetActive(false);
+            AnimateRain();
+        }
+
+        private void LateUpdate()
+        {
+            if (game == null || game.State != FlappyBirdGame.PlayState.Playing) return;
+            Vector3 bird = game.Bird.transform.position;
+            Vector3 target = bird + Vector3.left * SafeDistance;
+            Vector3 position = Vector3.Lerp(transform.position, target, 1 - Mathf.Exp(-3 * Time.deltaTime));
+            // Clamp every frame: even rapid movement cannot close the safety gap.
+            position.x = Mathf.Min(position.x, bird.x - SafeDistance);
+            transform.position = position;
+            animationTime += Time.deltaTime;
+            AnimateRain();
+            float flash = Mathf.Repeat(animationTime, 3.6f);
+            lightning.SetActive(flash > 3.1f && flash < 3.24f || flash > 3.32f && flash < 3.4f);
+        }
+
+        private void AnimateRain()
+        {
+            for (int i = 0; i < rain.Length; i++)
+            {
+                float fall = Mathf.Repeat(animationTime * 1.7f + i * 0.137f, 1);
+                rain[i].localPosition = new Vector3(-0.65f + (i % 6) * 0.24f - fall * 0.08f, -0.05f - fall * 1.1f, 0);
+            }
+        }
+
+        private void OnDestroy()
+        {
+            if (cloudSprite != null) Destroy(cloudSprite);
+            if (cloudTexture != null) Destroy(cloudTexture);
+        }
+    }
+}
