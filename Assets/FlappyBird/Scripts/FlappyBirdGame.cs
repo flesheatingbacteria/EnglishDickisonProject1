@@ -50,7 +50,7 @@ namespace FlappyBird
         private float timeScaleBeforePoem = 1f;
         private const string CreatorCredit = "Made by Alvin, Shridhar and Ishaan";
         // Shown on the title screen and poem page. See the version history in README.md.
-        public const string VersionLabel = "BETA-VERSION - 1.5.0";
+        public const string VersionLabel = "BETA-VERSION - 1.5.1";
         // Public-domain text: Academy of American Poets, poem 254 (Johnson).
         private const string PoemText =
             "Hope is the thing with feathers\n"
@@ -1320,6 +1320,7 @@ namespace FlappyBird
                 float t = Time.time - interludeStart;
                 float alpha = Mathf.Clamp01((t - 0.4f) / 0.4f);
                 if (ribbon.AllCaught) alpha *= Mathf.Clamp01(1 - (Time.time - ribbon.LastCatchTime - 1.2f) / 0.4f);
+                // Fade the words as the tree arrives, so a skipped cutscene never cuts them off.
                 if (arriving) alpha *= Mathf.Clamp01(1 - (Time.time - arriveStart) / 0.5f);
                 ribbon.Draw(Time.time, width, LevelAccent[interludeLevel], alpha * uiAlpha, ToUi);
                 Fade(alpha);

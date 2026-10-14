@@ -1,6 +1,6 @@
 # English Dickinson Project — beta-version
 
-> **This is the beta-version (fork).** It's the main game plus one experimental idea, "the tune without the words": the poem's *form* builds each level. Every stressed beat of a line is a pipe (so the stanzas run 13, 14 and 14 pipes in common meter's four-then-three rhythm), every dash is a breath with no pipe, pipes on rhyming lines share a colour, the level card shows each stanza's rhyme scheme (ABCB, ABAB, ABBB), and the HUD's words fall away level by level until Extremity is played with none. The main version lives at [redcappyal/EnglishDickisonProject1](https://github.com/redcappyal/EnglishDickisonProject1). The title screen shows **BETA-VERSION - 1.5.0**.
+> **This is the beta-version (fork).** It's the main game plus one experimental idea, "the tune without the words": the poem's *form* builds each level. Every stressed beat of a line is a pipe (so the stanzas run 13, 14 and 14 pipes in common meter's four-then-three rhythm), every dash is a breath with no pipe, pipes on rhyming lines share a colour, the level card shows each stanza's rhyme scheme (ABCB, ABAB, ABBB), and the HUD's words fall away level by level until Extremity is played with none. The main version lives at [redcappyal/EnglishDickisonProject1](https://github.com/redcappyal/EnglishDickisonProject1). The title screen shows **BETA-VERSION - 1.5.1**.
 
 A Unity 6 Flappy Bird game framework.
 
@@ -19,7 +19,7 @@ See [the framework guide](Assets/FlappyBird/README.md) for customization.
 
 ## Versions
 
-The version is shown on the title screen and the poem page. Each is tagged in git (`v1.0.0` ... `v1.5.0`).
+The version is shown on the title screen and the poem page. Each is tagged in git (`v1.0.0` ... `v1.5.1`).
 
 | Version | What changed |
 |---|---|
@@ -30,6 +30,7 @@ The version is shown on the title screen and the poem page. Each is tagged in gi
 | 1.4.0 | The nest's tree matches each world |
 | 1.4.1 | Hope never stops: no game over, score is crashes; the Gale's storm surge |
 | 1.5.0 | Smooth transitions everywhere; the tree glides in at each level; Reset Level button; rougher pipes; faster UI |
+| 1.5.1 | Skipped cutscenes fade their words out; clearer reset icon |
 
 A separate experimental version, **beta-version**, lives in the fork [flesheatingbacteria/EnglishDickisonProject1](https://github.com/flesheatingbacteria/EnglishDickisonProject1). It builds levels from the poem's form: meter, dashes and rhymes.
 
