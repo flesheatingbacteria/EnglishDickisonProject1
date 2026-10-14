@@ -4,7 +4,7 @@ A Unity 6 Flappy Bird game framework.
 
 ## Run
 
-1. Open this folder in Unity Hub with **Unity 6000.6.3f1**.
+1. Open this folder in Unity Hub with **Unity 6000.6.5f1**.
 2. Allow Unity to restore packages and import assets.
 3. Open `Assets/Scenes/SampleScene.unity` and press **Play**.
 4. Press **Space**, click, or tap to launch from the nest and flap.
