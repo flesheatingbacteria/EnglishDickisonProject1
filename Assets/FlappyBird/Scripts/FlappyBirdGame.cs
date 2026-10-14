@@ -103,7 +103,7 @@ namespace FlappyBird
         private WeatherFx weather;
         private const float CrossfadeTime = 4f;
         private static readonly float[] SceneryAlpha = { 0.7f, 0.32f, 0.6f };
-        // Tree that holds the nest (its crown changes per world), and crash/fall effects.
+        // Tree that holds the nest (summer, storm or winter to match the world), and crash/fall effects.
         private SpriteRenderer treeCrown;
         private SpriteRenderer[] nestArt = new SpriteRenderer[0];
         private Sprite featherArt;
@@ -268,9 +268,10 @@ namespace FlappyBird
                 treeCrown = NestPiece("Tree Crown", null, new Vector2(trunkX, -0.12f), 2);
                 // In front of the bird, so it sits inside the nest.
                 NestPiece("Nest Bowl", bowlArt, new Vector2(0, 0.1f), 6);
-                Sprite petal = PixelArt.Prop("petal", new Vector2(0.5f, 0.5f));
-                if (petal != null)
-                    nest.gameObject.AddComponent<BlossomPetals>().Initialize(this, petal, new Vector2(trunkX, 0.55f), 1.7f, groundBelow + 0.5f);
+                Sprite[] falling = { PixelArt.Prop("leaf_0", new Vector2(0.5f, 0.5f)), PixelArt.Prop("leaf_1", new Vector2(0.5f, 0.5f)),
+                    PixelArt.Prop("leaf_2", new Vector2(0.5f, 0.5f)) };
+                if (System.Array.TrueForAll(falling, sprite => sprite != null))
+                    nest.gameObject.AddComponent<TreeLeaves>().Initialize(this, falling, treeCrown.transform, new Vector2(trunkX, 0.55f), 1.7f, groundBelow + 0.5f);
                 nestArt = nest.GetComponentsInChildren<SpriteRenderer>();
                 return;
             }

@@ -9,6 +9,7 @@ Open `Assets/Scenes/SampleScene.unity` and press **Play**. The game creates its 
 - A dark storm cloud follows behind the bird in The Gale, with rain and occasional lightning. It keeps a safe distance and cannot damage the bird.
 - **Hope:** drains every second (`energyDrain`, more each level) and by `crashCost` per crash. Hearts (`HopeHeart`) appear with every `heartEvery`th pipe, hugging a cap or off the line between gaps, and restore `heartValue`. At zero the bird falls and the level restarts.
 - **Pipes** are procedural: each gap is placed relative to the last, and speed, gap size and the jumps between gaps all grow through each level.
+- **The nest's tree** matches the world: a summer tree dropping leaves (Hope), a storm-bent tree that sways and sheds torn leaves (The Gale), and a frozen tree dropping snow (Extremity). See `TreeLeaves`.
 - **Cutscenes** (`StanzaRibbon`): the stanza streams in as a wave of words the bird flies through; caught words gather into the stanza at the top. Space skips. Meanwhile leftover pipes fade, the backdrop, ground, sky, particles and music cross-fade, and `WeatherFx` rolls the next world's weather in (storm clouds and rain for the Gale, snow for Extremity).
 
 ## Customize

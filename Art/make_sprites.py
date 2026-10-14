@@ -666,34 +666,56 @@ def prop_sprites():
     box(px, 1, 0, 4, 8, c("#8a5a2e"), 12, 8); box(px, 4, 0, 9, 8, c("#6e4826"), 12, 8); box(px, 9, 0, 11, 8, c("#4a2c16"), 12, 8)
     px[5, 2] = c("#4a2c16"); px[6, 3] = c("#4a2c16"); px[3, 6] = c("#a8784a")
 
-    # cherry blossom crowns: full bloom, storm-thinned, and snow-dusted
-    def crown(level):
-        img = Image.new("RGBA", (56, 40), CLEAR)
-        q = img.load()
-        for x0, y0, x1, y1 in ((28, 39, 28, 22), (28, 26, 14, 14), (28, 24, 44, 12), (28, 22, 26, 8), (20, 18, 8, 18), (36, 16, 50, 18)):
+    # one tree per world: idyllic summer, storm-bent, and frozen
+    def limbs(q, lines, col, thick=1):
+        for x0, y0, x1, y1 in lines:
             n = max(abs(x1 - x0), abs(y1 - y0))
             for t in range(n + 1):
                 x, y = round(x0 + (x1 - x0) * t / n), round(y0 + (y1 - y0) * t / n)
-                box(q, x - 1, y, x + 1, y + 1, c("#5a3420"), 56, 40)
-        rnd = random.Random(70 + level)
-        puffs = [(14, 18, 10), (28, 11, 12), (42, 18, 10), (21, 25, 9), (35, 25, 9), (6, 22, 6), (50, 22, 6)]
-        if level == 1:  # the gale has stripped it half bare
-            puffs = [p for i, p in enumerate(puffs) if i in (1, 2, 4, 6)]
-        pink, light, dark = (("#f7b6c8", "#ffd8e4", "#d98aa2"), ("#d98aa2", "#f0b0c4", "#a8607a"), ("#f2b8ca", "#ffe0ea", "#c98ba0"))[level]
-        for cx, cy, r in puffs:
-            circle(q, cx, cy, r, c(pink), 56, 40)
-        for cx, cy, r in puffs:
-            circle(q, cx - r // 3, cy - r // 3, r // 2, c(light), 56, 40)
-        for _ in range(40):  # individual blossoms and shadows
-            x, y = rnd.randrange(56), rnd.randrange(40)
-            if q[x, y][3] and q[x, y] != c("#5a3420"):
-                q[x, y] = c(dark) if rnd.random() < 0.5 else c("#ffffff")
-        if level == 2:  # snow settled on top
+                box(q, x - thick, y, x + thick, y + 1, col, 56, 40)
+
+    def crown(level):
+        img = Image.new("RGBA", (56, 40), CLEAR)
+        q = img.load()
+        rnd = random.Random(80 + level)
+        if level == 0:  # summer: a full, sunlit canopy with a few apples
+            limbs(q, ((28, 39, 28, 24),), c("#6e4826"))
+            puffs = [(14, 20, 10), (28, 12, 13), (42, 20, 10), (20, 27, 9), (36, 27, 9), (6, 25, 6), (50, 25, 6)]
             for cx, cy, r in puffs:
-                for y in range(cy - r, cy - r // 3):
-                    for x in range(cx - r, cx + r + 1):
-                        if 0 <= x < 56 and 0 <= y < 40 and q[x, y][3] and (x - cx) ** 2 + (y - cy) ** 2 <= r * r:
-                            q[x, y] = c("#f4f8ff")
+                circle(q, cx, cy, r, c("#4fa040"), 56, 40)
+            for cx, cy, r in puffs:
+                circle(q, cx - r // 3, cy - r // 3, r // 2, c("#7cc860"), 56, 40)
+            for cx, cy, r in puffs[:3]:
+                circle(q, cx - r // 2, cy - r // 2, max(1, r // 5), c("#b6e48a"), 56, 40)
+            for _ in range(30):
+                x, y = rnd.randrange(56), rnd.randrange(40)
+                if q[x, y][3]:
+                    q[x, y] = c("#3a7a32")
+            for x, y in ((18, 18), (33, 9), (40, 24), (24, 28)):
+                box(q, x, y, x + 2, y + 2, c("#e8403a"), 56, 40)
+                q[x, y] = c("#ff9a8a")
+        elif level == 1:  # storm: bare, twisted and bent by the wind, a few ragged leaves left
+            wood = c("#7a625a")
+            limbs(q, ((30, 39, 28, 26), (28, 28, 14, 14), (28, 26, 18, 6), (28, 24, 40, 12), (20, 16, 6, 12), (16, 10, 8, 2),
+                      (36, 16, 46, 8), (22, 20, 12, 22)), wood)
+            limbs(q, ((14, 14, 4, 18), (18, 6, 10, 4), (40, 12, 50, 14), (24, 12, 22, 2)), wood, 0)
+            for x, y in ((10, 12), (6, 16), (12, 3), (20, 5), (44, 9), (48, 13), (16, 21)):
+                box(q, x - 1, y, x + 2, y + 2, c("#7a7a3a"), 56, 40)
+                q[x, y] = c("#a8a85a")
+        else:  # winter: frozen branches capped with snow, icicles hanging
+            wood = c("#4a3a3a")
+            limbs(q, ((28, 39, 28, 22), (28, 28, 14, 14), (28, 26, 42, 12), (28, 22, 26, 6), (18, 18, 8, 16), (38, 16, 50, 18),
+                      (14, 14, 10, 6), (42, 12, 46, 4)), wood)
+            for y in range(1, 40):  # snow on every branch top
+                for x in range(56):
+                    if q[x, y][3] and q[x, y - 1][3] == 0 and rnd.random() < 0.9:
+                        q[x, y - 1] = c("#f4f8ff")
+                        if rnd.random() < 0.5 and y > 1 and q[x, y - 2][3] == 0:
+                            q[x, y - 2] = c("#f4f8ff")
+            for x, y in ((12, 16), (20, 21), (36, 15), (44, 15), (24, 9)):  # icicles
+                for i in range(rnd.randint(2, 4)):
+                    if q[x, y + 1 + i][3] == 0:
+                        q[x, y + 1 + i] = c("#bfe6ff")
         outline(img)
         return img
 
@@ -701,7 +723,10 @@ def prop_sprites():
     return {"note": note, "bolt": bolt, "storm_cloud": cloud, "nest": nest, "branch": branch, "heart": heart(),
             "tree_trunk": trunk, "feather_bit": feather_bit,
             "crown_0": crown(0), "crown_1": crown(1), "crown_2": crown(2),
-            "petal": with_outline(draw_map(["PP.", ".PL"], {"P": c("#f7a8bf"), "L": c("#ffe0ea")}))}
+            # what falls from each tree: summer leaves, storm-torn leaves, snow
+            "leaf_0": with_outline(draw_map(["GG.", ".GL"], {"G": c("#5cb84a"), "L": c("#a6e070")})),
+            "leaf_1": with_outline(draw_map(["BB.", ".BD"], {"B": c("#7a6a3a"), "D": c("#4a3a20")})),
+            "leaf_2": draw_map([".W.", "WLW", ".W."], {"W": c("#ffffff"), "L": c("#d8eeff")})}
 
 
 def main():
