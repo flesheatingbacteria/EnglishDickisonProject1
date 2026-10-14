@@ -95,7 +95,7 @@ namespace FlappyBird
         }
 
         // Drift away to the left (the game hides it once it is gone).
-        public void Leave() { leaving = true; }
+        public void Leave() { leaving = true; lightning.SetActive(false); }
 
         public void ResetStorm()
         {

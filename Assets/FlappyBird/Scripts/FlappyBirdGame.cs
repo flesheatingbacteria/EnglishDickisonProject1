@@ -11,8 +11,8 @@ namespace FlappyBird
     {
         // "And never stops - at all -": there is no game over. GameOver is a crash: the bird
         // freezes, then flaps on. Interlude is the stanza cutscene that opens the game and
-        // links one level to the next.
-        public enum PlayState { Ready, Playing, GameOver, AwaitingFlap, Complete, Interlude }
+        // links one level to the next. Warmth is the sunbreak after the Gale.
+        public enum PlayState { Ready, Playing, GameOver, AwaitingFlap, Complete, Interlude, Warmth }
         [Header("Bird")]
         [Min(0.1f)] public float gravityScale = 2.2f;
         [Min(0.1f)] public float flapSpeed = 6.5f;
@@ -39,7 +39,7 @@ namespace FlappyBird
         public int FewestCrashes { get; private set; } = -1;
         public float Energy { get; private set; } = 100;
         // Pipes speed up within each level and from one level to the next.
-        public bool WorldMoving => State == PlayState.Playing || State == PlayState.Interlude;
+        public bool WorldMoving => State == PlayState.Playing || State == PlayState.Interlude || State == PlayState.Warmth;
         public float CurrentSpeed => pipeSpeed * (1 + 0.12f * LevelIndex + 0.1f * LevelProgress + 0.15f * StormSurge);
         // "And sore must be the storm": over the Gale's last stretch the storm throws everything it has.
         public float StormSurge => LevelIndex == 1 && (State == PlayState.Playing || State == PlayState.GameOver || State == PlayState.AwaitingFlap)
@@ -111,6 +111,11 @@ namespace FlappyBird
         private Color skyFrom, skyTo;
         private int interludeFrom;
         private WeatherFx weather;
+        private WarmthScene warmthScene;
+        private bool warmthWorld;
+        private float warmthStart;
+        private const float WarmthDuration = 9f;
+        private int VisualLevel => warmthWorld ? 0 : LevelIndex;
         private const float CrossfadeTime = 4f;
         private static readonly float[] SceneryAlpha = { 0.7f, 0.32f, 0.6f };
         // Tree that holds the nest (summer, storm or winter to match the world), and crash/fall effects.
@@ -236,6 +241,8 @@ namespace FlappyBird
             gameObject.AddComponent<BirdThoughtNotes>().Initialize(Bird.transform, music, square);
             weather = gameObject.AddComponent<WeatherFx>();
             weather.Initialize(this, square, Floor);
+            warmthScene = gameObject.AddComponent<WarmthScene>();
+            warmthScene.Initialize(square);
             FewestCrashes = PlayerPrefs.GetInt(BestKey, -1);
             ApplyLevel();
             ResetRun();
@@ -378,6 +385,9 @@ namespace FlappyBird
             AnimateScenery();
             AnimateBird();
             UpdateCrossfade();
+            float sunlight = warmthWorld ? (State == PlayState.Warmth ? CrossfadeBlend : 1)
+                : State == PlayState.Interlude && interludeFrom == 0 && interludeLevel == 2 ? 1 - CrossfadeBlend : 0;
+            warmthScene.Animate(arenaCamera, sunlight, Time.time - warmthStart);
             shownEnergy = Mathf.MoveTowards(shownEnergy, Energy, 120 * Time.deltaTime);
             smoothSurge = Mathf.MoveTowards(smoothSurge, StormSurge, 0.35f * Time.deltaTime);
             if (showingTitle)
@@ -394,6 +404,7 @@ namespace FlappyBird
                 return;
             }
             if (State == PlayState.Interlude) { UpdateInterlude(); return; }
+            if (State == PlayState.Warmth) { UpdateWarmth(); return; }
             float surge = smoothSurge;
             weather.Surge(surge);
             storm.Surge(surge);
@@ -500,11 +511,61 @@ namespace FlappyBird
             Bird.Stop();
             arriving = false;
             interludeLevel = level;
-            interludeFrom = LevelIndex;
+            interludeFrom = VisualLevel;
             interludeStart = Time.time;
             worldSwapped = level == LevelIndex;
             float right = arenaCamera.orthographicSize * arenaCamera.aspect;
             ribbon = new StanzaRibbon(Stanzas[level], right + 1, Time.time + 0.6f, 2 * arenaCamera.orthographicSize / UiHeight);
+        }
+
+        // A quiet beat for the Gale's final line before the third stanza begins.
+        private void StartWarmth()
+        {
+            State = PlayState.Warmth;
+            birdVelocity = Bird.VerticalSpeed;
+            Bird.Stop();
+            arriving = false;
+            ribbon = null;
+            warmthStart = Time.time;
+            interludeFrom = 1;
+            interludeLevel = 0; // Blend the storm into clear weather without advancing the level.
+            CaptureOutgoingWorld();
+            skyFrom = arenaCamera.backgroundColor;
+            warmthWorld = true;
+            ApplyLevel();
+            skyTo = arenaCamera.backgroundColor;
+            arenaCamera.backgroundColor = skyFrom;
+            crossfadeStart = Time.time;
+            smoothSurge = 0;
+            surgeStart = gustAt = boltAt = -10;
+            weather.Surge(0);
+            storm.Surge(0);
+            storm.gameObject.SetActive(true);
+            storm.Leave();
+            ScrollWorld(0);
+        }
+
+        private void UpdateWarmth()
+        {
+            float elapsed = Time.time - warmthStart;
+            WorldSpeed = Mathf.MoveTowards(WorldSpeed, pipeSpeed * 0.65f, pipeSpeed * Time.deltaTime);
+            ScrollWorld(WorldSpeed);
+            FadePipes(elapsed);
+            GlideBird(0.15f + Mathf.Sin(elapsed * 1.2f) * 0.25f);
+            if (elapsed >= WarmthDuration || elapsed > CrossfadeTime && FlapPressed() && !PointerOverControls())
+                StartInterlude(2);
+        }
+
+        private void FadePipes(float elapsed)
+        {
+            if (pipes.childCount == 0) return;
+            float fade = Mathf.Clamp01(1 - elapsed / 0.5f);
+            foreach (SpriteRenderer piece in pipes.GetComponentsInChildren<SpriteRenderer>())
+            {
+                Color color = piece.color;
+                piece.color = new Color(color.r, color.g, color.b, Mathf.Min(color.a, fade));
+            }
+            if (fade <= 0) ClearPipes();
         }
 
         private void UpdateInterlude()
@@ -529,16 +590,7 @@ namespace FlappyBird
             if (t < 0.8f) WorldSpeed = Mathf.Min(WorldSpeed, pipeSpeed * Mathf.SmoothStep(0, 1, t / 0.8f) + 0.01f);
             ScrollWorld(WorldSpeed);
             // Leftover pipes fade out instead of vanishing.
-            if (pipes.childCount > 0)
-            {
-                float fade = Mathf.Clamp01(1 - t / 0.5f);
-                foreach (SpriteRenderer piece in pipes.GetComponentsInChildren<SpriteRenderer>())
-                {
-                    Color color = piece.color;
-                    piece.color = new Color(color.r, color.g, color.b, Mathf.Min(color.a, fade));
-                }
-                if (fade <= 0) ClearPipes();
-            }
+            FadePipes(t);
             if (!worldSwapped && t >= 1f) SwapWorld();
 
             // The bird flies the wave of words.
@@ -588,14 +640,30 @@ namespace FlappyBird
             if (blend < 1) return;
             backdropOld.enabled = groundOld.enabled = false;
             if (sceneryOld != null) { sceneryArt.Remove(sceneryOld); Destroy(sceneryOld.gameObject); sceneryOld = null; }
-            if (interludeFrom == 1 && LevelIndex != 1) storm.gameObject.SetActive(false);
-            weather.Set(LevelIndex);
+            if (interludeFrom == 1 && VisualLevel != 1) storm.gameObject.SetActive(false);
+            weather.Set(VisualLevel);
         }
 
         // Keeps the old world on screen in front of the new one so they can cross-fade.
         private void SwapWorld()
         {
             worldSwapped = true;
+            CaptureOutgoingWorld();
+            skyFrom = arenaCamera.backgroundColor;
+            warmthWorld = false;
+            LevelIndex = interludeLevel;
+            ApplyLevel();
+            // The following storm drifts in to the Gale and drifts away when leaving it.
+            if (interludeLevel == 1) storm.EnterFromLeft();
+            else if (interludeFrom == 1) { storm.gameObject.SetActive(true); storm.Leave(); }
+            skyTo = arenaCamera.backgroundColor;
+            arenaCamera.backgroundColor = skyFrom;
+            crossfadeStart = Time.time;
+            ScrollWorld(0);
+        }
+
+        private void CaptureOutgoingWorld()
+        {
             if (backdropOld == null)
             {
                 backdropOld = new GameObject("Backdrop (fading out)", typeof(SpriteRenderer)).GetComponent<SpriteRenderer>();
@@ -614,16 +682,6 @@ namespace FlappyBird
             groundOld.size = groundArt.size;
             groundOld.enabled = groundArt.enabled;
             backdropOld.color = groundOld.color = Color.white;
-            skyFrom = arenaCamera.backgroundColor;
-            LevelIndex = interludeLevel;
-            ApplyLevel();
-            // The following storm drifts in to the Gale and drifts away when leaving it.
-            if (interludeLevel == 1) storm.EnterFromLeft();
-            else if (interludeFrom == 1) { storm.gameObject.SetActive(true); storm.Leave(); }
-            skyTo = arenaCamera.backgroundColor;
-            arenaCamera.backgroundColor = skyFrom;
-            crossfadeStart = Time.time;
-            ScrollWorld(0);
         }
 
         private void FinishInterlude()
@@ -737,7 +795,8 @@ namespace FlappyBird
             {
                 Energy = 100; // Reaching a new stanza refills hope.
                 surgeStart = -10;
-                StartInterlude(LevelIndex + 1);
+                if (LevelIndex == 1) StartWarmth();
+                else StartInterlude(LevelIndex + 1);
             }
             else
             {
@@ -767,41 +826,43 @@ namespace FlappyBird
 
         private void ApplyLevel()
         {
+            int level = VisualLevel;
             // 0 Hope: dawn, drifting motes. 1 The Gale: storm, wind, following storm. 2 Extremity: frozen sea, waves.
-            arenaCamera.backgroundColor = LevelIndex == 0 ? new Color(0.78f, 0.7f, 0.92f)
-                : LevelIndex == 1 ? new Color(0.18f, 0.2f, 0.28f) : new Color(0.06f, 0.09f, 0.23f);
-            ground.color = LevelIndex == 0 ? new Color(0.78f, 0.61f, 0.42f)
-                : LevelIndex == 1 ? new Color(0.28f, 0.36f, 0.4f) : new Color(0.61f, 0.77f, 0.89f);
-            grass.color = LevelIndex == 0 ? new Color(0.55f, 0.81f, 0.35f)
-                : LevelIndex == 1 ? new Color(0.56f, 0.67f, 0.72f) : new Color(0.96f, 0.97f, 1f);
-            storm.gameObject.SetActive(LevelIndex == 1);
+            arenaCamera.backgroundColor = warmthWorld ? WarmthScene.SkyColor : level == 0 ? new Color(0.78f, 0.7f, 0.92f)
+                : level == 1 ? new Color(0.18f, 0.2f, 0.28f) : new Color(0.06f, 0.09f, 0.23f);
+            ground.color = level == 0 ? new Color(0.78f, 0.61f, 0.42f)
+                : level == 1 ? new Color(0.28f, 0.36f, 0.4f) : new Color(0.61f, 0.77f, 0.89f);
+            grass.color = level == 0 ? new Color(0.55f, 0.81f, 0.35f)
+                : level == 1 ? new Color(0.56f, 0.67f, 0.72f) : new Color(0.96f, 0.97f, 1f);
+            storm.gameObject.SetActive(level == 1);
             if (sceneryOld != null) { sceneryArt.Remove(sceneryOld); Destroy(sceneryOld.gameObject); }
             sceneryOld = null;
             // During a cutscene the old level's wind/motes/waves fade out instead of vanishing.
-            if (scenery != null && State == PlayState.Interlude) sceneryOld = scenery;
+            if (scenery != null && (State == PlayState.Interlude || State == PlayState.Warmth)) sceneryOld = scenery;
             else if (scenery != null) { sceneryArt.Remove(scenery); scenery.gameObject.SetActive(false); Destroy(scenery.gameObject); }
-            if (State != PlayState.Interlude) weather.Set(LevelIndex);
+            if (State != PlayState.Interlude && State != PlayState.Warmth) weather.Set(level);
             scenery = new GameObject("Level Imagery").transform;
             scenery.SetParent(transform, false);
             for (int i = 0; i < 24; i++)
             {
-                Vector2 size = LevelIndex == 0 ? new Vector2(0.06f, 0.06f)
-                    : LevelIndex == 1 ? new Vector2(0.65f, 0.025f) : new Vector2(0.7f, 0.07f);
-                Color color = LevelIndex == 0 ? new Color(1f, 0.96f, 0.75f, 0.7f)
-                    : LevelIndex == 1 ? new Color(0.8f, 0.9f, 1f, 0.32f) : new Color(0.85f, 0.95f, 1f, 0.6f);
-                Block(LevelIndex == 0 ? "Mote" : LevelIndex == 1 ? "Wind" : "Wave", scenery,
+                Vector2 size = level == 0 ? new Vector2(0.06f, 0.06f)
+                    : level == 1 ? new Vector2(0.65f, 0.025f) : new Vector2(0.7f, 0.07f);
+                Color color = level == 0 ? new Color(1f, 0.96f, 0.75f, 0.7f)
+                    : level == 1 ? new Color(0.8f, 0.9f, 1f, 0.32f) : new Color(0.85f, 0.95f, 1f, 0.6f);
+                Block(level == 0 ? "Mote" : level == 1 ? "Wind" : "Wave", scenery,
                     Vector2.zero, size, color, false, -2);
             }
             ApplyLevelArt();
             // Reaching a level mid-run shows its banner briefly; on a fresh start the Ready screen shows it.
             bannerStart = State == PlayState.Playing ? Time.unscaledTime : -10;
-            music.SetLevel(LevelMusic[LevelIndex]);
+            music.SetLevel(LevelMusic[level]);
         }
 
         private void ApplyLevelArt()
         {
             // One long strip that wraps seamlessly; it scrolls in Update.
-            backdropArt.sprite = PixelArt.Background(LevelIndex, arenaCamera.orthographicSize - Floor);
+            backdropArt.sprite = warmthWorld ? warmthScene.Background(arenaCamera.orthographicSize - Floor)
+                : PixelArt.Background(LevelIndex, arenaCamera.orthographicSize - Floor);
             backdropArt.enabled = backdropArt.sprite != null;
             if (backdropArt.sprite != null)
             {
@@ -810,8 +871,8 @@ namespace FlappyBird
                 backdropArt.transform.localPosition = new Vector3(-backdropScroll, Floor, 0);
             }
 
-            if (treeCrown != null) treeCrown.sprite = PixelArt.Prop("crown_" + LevelIndex, new Vector2(0.5f, 0.12f));
-            groundArt.sprite = PixelArt.Ground(LevelIndex);
+            if (treeCrown != null) treeCrown.sprite = PixelArt.Prop("crown_" + VisualLevel, new Vector2(0.5f, 0.12f));
+            groundArt.sprite = PixelArt.Ground(VisualLevel);
             bool hasGround = groundArt.sprite != null;
             groundArt.enabled = hasGround;
             ground.enabled = grass.enabled = !hasGround;
@@ -828,7 +889,7 @@ namespace FlappyBird
             if (birdArt == null) return;
             if (State == PlayState.GameOver || State == PlayState.AwaitingFlap)
                 birdArt.sprite = birdHurt != null ? birdHurt : birdFrames[1];
-            else if (State == PlayState.Playing || State == PlayState.Interlude)
+            else if (State == PlayState.Playing || State == PlayState.Interlude || State == PlayState.Warmth)
             {
                 int frame = Mathf.FloorToInt(Time.time * 12) % 4; // up, mid, down, mid
                 birdArt.sprite = birdFrames[frame == 3 ? 1 : frame];
@@ -841,7 +902,7 @@ namespace FlappyBird
         private void AnimateScenery()
         {
             float blend = CrossfadeBlend;
-            AnimateScenery(scenery, LevelIndex, blend);
+            AnimateScenery(scenery, VisualLevel, blend);
             AnimateScenery(sceneryOld, interludeFrom, 1 - blend);
         }
 
@@ -916,7 +977,19 @@ namespace FlappyBird
 
         public void ResetRun()
         {
+            bool leavingWarmth = warmthWorld;
+            warmthWorld = false;
             State = PlayState.Ready;
+            ribbon = null;
+            arriving = false;
+            if (backdropOld != null) backdropOld.enabled = groundOld.enabled = false;
+            if (sceneryOld != null) { sceneryArt.Remove(sceneryOld); Destroy(sceneryOld.gameObject); sceneryOld = null; }
+            crossfadeStart = -10;
+            if (leavingWarmth) ApplyLevel();
+            weather.Set(LevelIndex);
+            weather.Surge(0);
+            storm.Surge(0);
+            warmthScene.Animate(arenaCamera, 0, 0);
             readyAt = Time.unscaledTime;
             WorldSpeed = 0;
             smoothSurge = 0;
@@ -1022,7 +1095,7 @@ namespace FlappyBird
         private void DrawHud(float width)
         {
             float now = Time.unscaledTime;
-            Color accent = LevelAccent[LevelIndex];
+            Color accent = warmthWorld ? LevelAccent[0] : LevelAccent[LevelIndex];
             Rect fullScreen = new Rect(0, 0, width, UiHeight);
             // Full-screen effects (flashes, the dawn) are part of the world, not the HUD's fade.
             Color hudColor = GUI.color;
@@ -1062,11 +1135,11 @@ namespace FlappyBird
             // back as the world changes, so the name never swaps mid-frame.
             float sinceSwapCard = Time.time - crossfadeStart;
             Fade(sinceSwapCard < 0.6f ? Mathf.Abs(1 - sinceSwapCard / 0.3f) : 1);
-            string levelName = LevelNames[LevelIndex].ToUpperInvariant();
-            int progress = State == PlayState.Complete ? ObstaclesPerLevel : Score % ObstaclesPerLevel;
-            Rect card = new Rect(UiMargin, UiMargin, Mathf.Max(PixelUi.TextWidth(levelName, 4), 150) + 36, 96);
+            string levelName = warmthWorld ? "WARMTH" : LevelNames[LevelIndex].ToUpperInvariant();
+            int progress = State == PlayState.Complete || warmthWorld ? ObstaclesPerLevel : Score % ObstaclesPerLevel;
+            Rect card = new Rect(UiMargin, UiMargin, Mathf.Max(PixelUi.TextWidth(levelName, 4), warmthWorld ? 240 : 150) + 36, 96);
             PixelUi.Frame(card, "panel");
-            PixelUi.Text("LEVEL " + (LevelIndex + 1), card.x + 18, card.y + 16, 2, UiMuted);
+            PixelUi.Text(warmthWorld ? "AFTER THE GALE" : "LEVEL " + (LevelIndex + 1), card.x + 18, card.y + 16, 2, UiMuted);
             PixelUi.Text($"{progress}/{ObstaclesPerLevel}", card.xMax - 18, card.y + 16, 2, UiMuted, 1);
             PixelUi.Text(levelName, card.x + 18, card.y + 32, 4, accent);
             Rect track = new Rect(card.x + 18, card.y + 62, card.width - 36, 9);
@@ -1130,11 +1203,17 @@ namespace FlappyBird
                 Fade(1);
             }
             float sinceSurge = now - surgeStart;
-            if (LevelIndex == 1 && surgeStart > 0 && sinceSurge < 3f)
+            if (LevelIndex == 1 && surgeStart > 0 && sinceSurge < 5f)
             {
-                Fade(Mathf.Clamp01((3f - sinceSurge) / 0.6f));
-                PixelUi.Text("AND SORE MUST BE THE STORM -", width / 2, 150 + Mathf.Round(Mathf.Clamp01(1 - sinceSurge / 0.3f) * 6) * 3, 3,
+                Fade(Mathf.Clamp01((5f - sinceSurge) / 0.8f));
+                const string stormLine = "AND SORE MUST BE THE STORM -";
+                const string birdLine = "THAT COULD ABASH THE LITTLE BIRD";
+                float size = 3;
+                while (size > 1 && Mathf.Max(PixelUi.TextWidth(stormLine, size), PixelUi.TextWidth(birdLine, size)) > width - 48) size--;
+                float y = 150 + Mathf.Round(Mathf.Clamp01(1 - sinceSurge / 0.3f) * 6) * 3;
+                PixelUi.Text(stormLine, width / 2, y, size,
                     new Color(1f, 0.55f, 0.45f), 0.5f);
+                PixelUi.Text(birdLine, width / 2, y + 5 * size + 12, size, UiMuted, 0.5f);
                 Fade(1);
             }
             if (State == PlayState.Ready || bannerAlpha > 0 && !midRunBanner)
@@ -1191,6 +1270,21 @@ namespace FlappyBird
                 ribbon.Draw(Time.time, width, LevelAccent[interludeLevel], alpha * uiAlpha, ToUi);
                 Fade(alpha);
                 if (t > 0.8f && !arriving) PixelUi.Text("SPACE TO SKIP", width / 2, UiHeight - UiMargin - 96, 2, UiMuted, 0.5f);
+                Fade(1);
+            }
+
+            if (State == PlayState.Warmth)
+            {
+                float elapsed = Time.time - warmthStart;
+                float alpha = Mathf.Clamp01((elapsed - 1) / 1.2f) * Mathf.Clamp01((WarmthDuration - elapsed) / 0.8f);
+                Fade(alpha);
+                const string line = "THAT KEPT SO MANY WARM -";
+                float size = 4;
+                while (size > 1 && PixelUi.TextWidth(line, size) + 48 > width - 48) size--;
+                float panelWidth = PixelUi.TextWidth(line, size) + 48;
+                PixelUi.Frame(new Rect(Mathf.Round((width - panelWidth) / 2), 150, panelWidth, 64), "panel");
+                PixelUi.Text(line, width / 2, 172, size, LevelAccent[0], 0.5f);
+                if (elapsed > CrossfadeTime) PixelUi.Text("SPACE OR CLICK TO CONTINUE", width / 2, UiHeight - UiMargin - 96, 2, UiMuted, 0.5f);
                 Fade(1);
             }
 
