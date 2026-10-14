@@ -28,7 +28,7 @@ namespace FlappyBird
 
         private bool showingPoem;
         private float timeScaleBeforePoem = 1f;
-        private const string CreatorCredit = "Created by Alvin, Shridhar, Ishaan";
+        private const string CreatorCredit = "Made by Alvin, Shridhar and Ishaan";
         // Public-domain text: Academy of American Poets, poem 254 (Johnson).
         private const string PoemText =
             "Hope is the thing with feathers\n"
@@ -74,7 +74,15 @@ namespace FlappyBird
         private Texture2D texture;
         private float spawnTimer;
         private float resumeAt;
-        private GUIStyle titleStyle, textStyle, scoreStyle;
+        // HUD (drawn with PixelUi in a virtual space 800 units tall).
+        private const float UiHeight = 800, UiMargin = 24;
+        private static readonly Color[] LevelAccent = {
+            new Color(1f, 0.72f, 0.29f), new Color(0.81f, 0.85f, 0.91f), new Color(0.66f, 0.91f, 1f)
+        };
+        private static readonly Color UiMuted = new Color(0.86f, 0.82f, 0.9f);
+        private Rect poemButton, playAgainButton;
+        private float bannerStart = -10, scorePopAt = -10;
+        private int shownScore;
         private float Floor => -cameraHalfHeight + 0.7f;
 
         // Open SampleScene and press Play. Other scenes can opt in with this component.
@@ -182,6 +190,23 @@ namespace FlappyBird
             Color straw = new Color(0.73f, 0.48f, 0.23f);
             // A branch supports the bowl; all pieces are decorative so takeoff is unobstructed.
             float branchLength = HalfWidth - 1.5f + 0.6f;
+            Sprite bowlArt = PixelArt.Prop("nest", new Vector2(0.5f, 1)), branchArt = PixelArt.Prop("branch", new Vector2(0.5f, 0.5f));
+            if (bowlArt != null && branchArt != null)
+            {
+                SpriteRenderer branch = new GameObject("Branch", typeof(SpriteRenderer)).GetComponent<SpriteRenderer>();
+                branch.transform.SetParent(nest, false);
+                branch.transform.localPosition = new Vector2(-branchLength / 2 + 0.2f, -0.25f);
+                branch.sprite = branchArt;
+                branch.drawMode = SpriteDrawMode.Tiled;
+                branch.size = new Vector2(branchLength, branchArt.bounds.size.y);
+                branch.sortingOrder = 1;
+                SpriteRenderer bowl = new GameObject("Nest Bowl", typeof(SpriteRenderer)).GetComponent<SpriteRenderer>();
+                bowl.transform.SetParent(nest, false);
+                bowl.transform.localPosition = new Vector2(0, 0.1f);
+                bowl.sprite = bowlArt;
+                bowl.sortingOrder = 6; // In front of the bird, so it sits inside the nest.
+                return;
+            }
             Block("Branch", nest, new Vector2(-branchLength / 2 + 0.2f, -0.25f), new Vector2(branchLength, 0.15f), wood, false, 1);
             for (int layer = 0; layer < 3; layer++)
             {
@@ -210,7 +235,7 @@ namespace FlappyBird
 #endif
         }
 
-        private static bool PointerOverControls()
+        private bool PointerOverControls()
         {
 #if ENABLE_INPUT_SYSTEM
             if (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame) return false;
@@ -221,11 +246,9 @@ namespace FlappyBird
             if (Input.GetKeyDown(KeyCode.Space)) return false;
             Vector2 pointer = Input.mousePosition;
 #endif
-            float scale = Mathf.Min(Screen.width / 640f, Screen.height / 800f);
-            float top = (Screen.height - 800 * scale) / 2;
-            float left = (Screen.width - 640 * scale) / 2;
-            return pointer.x >= left && pointer.x <= left + 640 * scale
-                && Screen.height - pointer.y >= top + 685 * scale;
+            float scale = Screen.height / UiHeight;
+            Vector2 ui = new Vector2(pointer.x / scale, (Screen.height - pointer.y) / scale);
+            return poemButton.Contains(ui) || playAgainButton.Contains(ui);
         }
 
         private void Update()
@@ -368,6 +391,8 @@ namespace FlappyBird
                     Vector2.zero, size, color, false, -2);
             }
             ApplyLevelArt();
+            // Reaching a level mid-run shows its banner briefly; on a fresh start the Ready screen shows it.
+            bannerStart = State == PlayState.Playing ? Time.unscaledTime : -10;
             music.SetLevel(LevelMusic[LevelIndex]);
         }
 
@@ -473,71 +498,153 @@ namespace FlappyBird
 
         private void OnGUI()
         {
-            if (titleStyle == null)
-            {
-                titleStyle = new GUIStyle(GUI.skin.label)
-                {
-                    alignment = TextAnchor.MiddleCenter,
-                    fontSize = 30,
-                    fontStyle = FontStyle.Bold,
-                    wordWrap = true
-                };
-                textStyle = new GUIStyle(titleStyle) { fontSize = 18, fontStyle = FontStyle.Normal };
-                scoreStyle = new GUIStyle(textStyle) { fontSize = 16 };
-                titleStyle.normal.textColor = textStyle.normal.textColor = scoreStyle.normal.textColor = Color.white;
-            }
-            float scale = Mathf.Min(Screen.width / 640f, Screen.height / 800f);
-            Matrix4x4 previous = GUI.matrix;
+            float scale = Screen.height / UiHeight;
+            float width = Screen.width / scale;
+            Matrix4x4 previousMatrix = GUI.matrix;
             Color previousColor = GUI.color;
-            GUI.matrix = Matrix4x4.TRS(new Vector3((Screen.width - 640 * scale) / 2,
-                (Screen.height - 800 * scale) / 2), Quaternion.identity, Vector3.one * scale);
+            GUI.matrix = Matrix4x4.Scale(new Vector3(scale, scale, 1));
             GUI.color = Color.white;
-
-            if (showingPoem)
-            {
-                DrawPanel(new Rect(30, 30, 580, 740), new Color(0.035f, 0.07f, 0.12f, 0.97f));
-                GUI.Label(new Rect(50, 52, 540, 72), "Hope is the thing with feathers", titleStyle);
-                GUI.Label(new Rect(50, 126, 540, 30), "Emily Dickinson", textStyle);
-                GUI.Label(new Rect(50, 158, 540, 30), "Poem 254 (Johnson) / 314 (Franklin)", scoreStyle);
-                GUI.Label(new Rect(50, 194, 540, 32), CreatorCredit, textStyle);
-                GUI.Label(new Rect(65, 242, 510, 370), PoemText, textStyle);
-                GUI.Label(new Rect(50, 626, 540, 44), "Public-domain text: Academy of American Poets", scoreStyle);
-                GUIStyle button = new GUIStyle(GUI.skin.button) { fontSize = 20 };
-                if (GUI.Button(new Rect(185, 694, 270, 48), State == PlayState.Ready ? "Begin the journey" : "Return to game", button))
-                    SetPoemVisible(false);
-            }
-            else
-            {
-                DrawPanel(new Rect(40, 20, 560, 240), new Color(0.035f, 0.07f, 0.12f, 0.82f));
-                GUI.Label(new Rect(55, 30, 530, 50), $"{LevelIndex + 1}. {LevelNames[LevelIndex]}", titleStyle);
-                GUI.Label(new Rect(55, 84, 530, 28), "Hope is the thing with feathers", textStyle);
-                GUI.Label(new Rect(55, 116, 530, 28), "Emily Dickinson | Poem 254 / 314", scoreStyle);
-                GUI.Label(new Rect(55, 148, 530, 28), CreatorCredit, scoreStyle);
-                Rect energy = new Rect(190, 187, 260, 28);
-                DrawPanel(energy, new Color(1f, 0.7f, 0.25f));
-                GUI.color = Color.black;
-                GUI.Label(energy, "ENERGY  100", scoreStyle);
-                GUI.color = Color.white;
-                int progress = State == PlayState.Complete ? ObstaclesPerLevel : Score % ObstaclesPerLevel;
-                GUI.Label(new Rect(55, 222, 530, 28), $"Obstacles: {progress} / {ObstaclesPerLevel}   |   Best: {BestScore}", scoreStyle);
-                string prompt = State == PlayState.Ready ? "Space / click to fly"
-                    : State == PlayState.GameOver ? "Hope keeps singing..."
-                    : State == PlayState.AwaitingFlap ? "Space / click to rise again"
-                    : State == PlayState.Complete ? "You carried hope through all three worlds!" : "";
-                GUI.Label(new Rect(40, 610, 560, 45), prompt, textStyle);
-                GUIStyle button = new GUIStyle(GUI.skin.button) { fontSize = 18 };
-                if (GUI.Button(new Rect(210, 690, 220, 44), "Read poem / Credits", button)) SetPoemVisible(true);
-            }
+            playAgainButton = Rect.zero;
+            if (showingPoem) DrawPoem(width);
+            else DrawHud(width);
+            PixelUi.Frame(new Rect(0, 0, width, UiHeight), "screen_frame", 4);
             GUI.color = previousColor;
-            GUI.matrix = previous;
+            GUI.matrix = previousMatrix;
         }
 
-        private void DrawPanel(Rect bounds, Color color)
+        private void DrawHud(float width)
         {
-            Color previous = GUI.color;
-            GUI.color = color;
-            GUI.DrawTexture(bounds, texture);
-            GUI.color = previous;
+            float now = Time.unscaledTime;
+            Color accent = LevelAccent[LevelIndex];
+
+            // Level card: name and one pip per obstacle in this level.
+            string levelName = LevelNames[LevelIndex].ToUpperInvariant();
+            const float pipStep = 21;
+            Rect card = new Rect(UiMargin, UiMargin,
+                Mathf.Max(PixelUi.TextWidth(levelName, 4), pipStep * ObstaclesPerLevel - 3) + 36, 96);
+            PixelUi.Frame(card, "panel");
+            PixelUi.Text("LEVEL " + (LevelIndex + 1), card.x + 18, card.y + 16, 2, UiMuted);
+            PixelUi.Text(levelName, card.x + 18, card.y + 32, 4, accent);
+            int progress = State == PlayState.Complete ? ObstaclesPerLevel : Score % ObstaclesPerLevel;
+            for (int i = 0; i < ObstaclesPerLevel; i++)
+                PixelUi.Icon(i < progress ? "pip_on" : "pip_off", card.x + 18 + i * pipStep, card.y + 62);
+
+            // Score pops one size up for a moment when it changes.
+            if (Score != shownScore) { if (Score > shownScore) scorePopAt = now; shownScore = Score; }
+            float scoreSize = now - scorePopAt < 0.12f ? 9 : 8;
+            PixelUi.Text(Score.ToString(), width / 2, UiMargin + (9 - scoreSize) * 2.5f, scoreSize, Color.white, 0.5f);
+            PixelUi.Text("BEST " + BestScore, width / 2, UiMargin + 56, 2, UiMuted, 0.5f);
+
+            // Energy: always full, with a shimmer running along it.
+            Rect bar = new Rect(width - UiMargin - 168, UiMargin + 6, 168, 30);
+            PixelUi.Icon("feather", bar.x - 36, bar.y);
+            PixelUi.Frame(bar, "bar");
+            Rect fill = new Rect(bar.x + 9, bar.y + 9, bar.width - 18, bar.height - 18);
+            PixelUi.Fill(fill, new Color(1f, 0.72f, 0.29f));
+            PixelUi.Fill(new Rect(fill.x, fill.y, fill.width, 3), new Color(1f, 0.89f, 0.63f));
+            PixelUi.Fill(new Rect(fill.x, fill.yMax - 3, fill.width, 3), new Color(0.78f, 0.47f, 0.16f));
+            for (float x = fill.x + 24; x < fill.xMax - 3; x += 24)
+                PixelUi.Fill(new Rect(x, fill.y + 3, 3, fill.height - 6), new Color(0.88f, 0.58f, 0.2f));
+            float shine = fill.x + Mathf.Round(Mathf.Repeat(now * 90, fill.width + 90) / 3) * 3 - 45;
+            Rect glint = Rect.MinMaxRect(Mathf.Max(fill.x, shine), fill.y, Mathf.Min(fill.xMax, shine + 6), fill.yMax);
+            if (glint.width > 0) PixelUi.Fill(glint, new Color(1, 1, 1, 0.55f));
+            PixelUi.Text("ENERGY", bar.xMax, bar.yMax + 9, 2, UiMuted, 1);
+
+            poemButton = new Rect(width - UiMargin - 84, UiMargin + 64, 84, 36);
+            if (Button(poemButton, "POEM", 2)) SetPoemVisible(true);
+
+            // Centre messages.
+            float bob = Mathf.Round(Mathf.Sin(now * 4) * 2) * 3;
+            bool banner = State == PlayState.Ready || now - bannerStart < 2.6f;
+            if (banner && State != PlayState.GameOver && State != PlayState.AwaitingFlap)
+            {
+                float fade = State == PlayState.Ready ? 1 : Mathf.Clamp01((2.6f - (now - bannerStart)) / 0.5f);
+                float slide = State == PlayState.Ready ? 0 : Mathf.Round(Mathf.Clamp01(1 - (now - bannerStart) / 0.25f) * 8) * 3;
+                GUI.color = new Color(1, 1, 1, fade);
+                string line = LevelLines[LevelIndex].ToUpperInvariant();
+                Rect panel = new Rect(0, 214 - slide, Mathf.Max(PixelUi.TextWidth(levelName, 7), PixelUi.TextWidth(line, 2)) + 60, 124);
+                panel.x = Mathf.Round((width - panel.width) / 2);
+                PixelUi.Frame(panel, "panel");
+                PixelUi.Text("LEVEL " + (LevelIndex + 1), width / 2, panel.y + 18, 2, UiMuted, 0.5f);
+                PixelUi.Text(levelName, width / 2, panel.y + 40, 7, accent, 0.5f);
+                PixelUi.Text(line, width / 2, panel.y + 90, 2, Color.white, 0.5f);
+                GUI.color = Color.white;
+            }
+            if (State == PlayState.Ready)
+                PixelUi.Text("SPACE OR CLICK TO FLY", width / 2, 520 + bob, 3, Color.white, 0.5f);
+            else if (State == PlayState.GameOver || State == PlayState.AwaitingFlap)
+            {
+                Rect panel = new Rect(0, 300, 372, State == PlayState.AwaitingFlap ? 96 : 66);
+                panel.x = Mathf.Round((width - panel.width) / 2);
+                PixelUi.Frame(panel, "panel");
+                PixelUi.Text("HOPE KEEPS SINGING...", width / 2, panel.y + 24, 3, accent, 0.5f);
+                if (State == PlayState.AwaitingFlap && Mathf.Repeat(now, 1) < 0.7f)
+                    PixelUi.Text("SPACE OR CLICK TO RISE AGAIN", width / 2, panel.y + 60, 2, UiMuted, 0.5f);
+            }
+            else if (State == PlayState.Complete)
+            {
+                Rect panel = new Rect(0, 250, 420, 196);
+                panel.x = Mathf.Round((width - panel.width) / 2);
+                PixelUi.Frame(panel, "panel");
+                PixelUi.Text("YOU CARRIED HOPE", width / 2, panel.y + 26, 4, accent, 0.5f);
+                PixelUi.Text("THROUGH ALL THREE WORLDS", width / 2, panel.y + 58, 3, Color.white, 0.5f);
+                PixelUi.Text($"SCORE {Score}   BEST {BestScore}", width / 2, panel.y + 88, 2, UiMuted, 0.5f);
+                playAgainButton = new Rect(width / 2 - 96, panel.y + 120, 192, 48);
+                if (Button(playAgainButton, "PLAY AGAIN", 3)) SelectLevel(0);
+            }
+
+            // Credits, small, bottom right.
+            const string poemCredit = "POEM BY EMILY DICKINSON";
+            float creditWidth = Mathf.Max(PixelUi.TextWidth(poemCredit, 2), PixelUi.TextWidth(CreatorCredit, 2));
+            PixelUi.Fill(new Rect(width - UiMargin - creditWidth - 9, UiHeight - UiMargin - 36, creditWidth + 18, 39),
+                new Color(0.08f, 0.06f, 0.1f, 0.6f));
+            Color credit = new Color(1, 1, 1, 0.9f);
+            PixelUi.SmallPrint(poemCredit, width - UiMargin, UiHeight - UiMargin - 30, credit, 1);
+            PixelUi.SmallPrint(CreatorCredit, width - UiMargin, UiHeight - UiMargin - 15, credit, 1);
+        }
+
+        private void DrawPoem(float width)
+        {
+            PixelUi.Fill(new Rect(0, 0, width, UiHeight), new Color(0.04f, 0.03f, 0.07f, 0.75f));
+            Rect page = new Rect(0, 36, Mathf.Min(width - 48, 600), 728);
+            page.x = Mathf.Round((width - page.width) / 2);
+            PixelUi.Frame(page, "parchment");
+            float center = page.center.x, room = page.width - 60;
+            Color ink = new Color(0.23f, 0.14f, 0.09f), faded = new Color(0.5f, 0.36f, 0.25f);
+            const string title = "\"HOPE\" IS THE THING WITH FEATHERS";
+            PixelUi.Text(title, center, page.y + 36, PixelUi.TextWidth(title, 3) <= room ? 3 : 2, ink, 0.5f, false);
+            PixelUi.Text("EMILY DICKINSON", center, page.y + 66, 2, faded, 0.5f, false);
+            Vector2 feather = PixelUi.IconSize("feather");
+            PixelUi.Icon("feather", center - feather.x / 2, page.y + 90);
+
+            string[] lines = PoemText.Split('\n');
+            float size = 3;
+            foreach (string line in lines)
+                if (PixelUi.TextWidth(line, 3) > room) size = 2;
+            float y = page.y + 140;
+            foreach (string line in lines)
+            {
+                if (line.Length == 0) { y += 5 * size; continue; }
+                PixelUi.Text(line, center, y, size, ink, 0.5f, false);
+                y += 5 * size + 8;
+            }
+
+            PixelUi.Text("POEM 254 (JOHNSON) / 314 (FRANKLIN)", center, page.yMax - 148, 2, faded, 0.5f, false);
+            PixelUi.Text("PUBLIC-DOMAIN TEXT: ACADEMY OF AMERICAN POETS", center, page.yMax - 132, 2, faded, 0.5f, false);
+            PixelUi.Text(CreatorCredit, center, page.yMax - 108, 2, ink, 0.5f, false);
+            string label = State == PlayState.Ready ? "BEGIN THE JOURNEY" : "BACK TO THE GAME";
+            Rect button = new Rect(0, page.yMax - 80, PixelUi.TextWidth(label, 3) + 48, 48);
+            button.x = Mathf.Round(center - button.width / 2);
+            if (Button(button, label, 3)) SetPoemVisible(false);
+        }
+
+        private static bool Button(Rect rect, string label, float size)
+        {
+            bool hover = rect.Contains(Event.current.mousePosition);
+            PixelUi.Frame(rect, hover ? "button_hover" : "button");
+            PixelUi.Text(label, rect.center.x, rect.y + (rect.height - 5 * size) / 2 - Mathf.Floor(size / 2), size,
+                new Color(0.23f, 0.12f, 0.05f), 0.5f, false);
+            return GUI.Button(rect, GUIContent.none, GUIStyle.none);
         }
 
         private void OnDestroy()
