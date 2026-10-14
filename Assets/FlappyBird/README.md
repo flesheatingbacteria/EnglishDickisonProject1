@@ -12,6 +12,7 @@ Open `Assets/Scenes/SampleScene.unity` and press **Play**. The game creates its 
 - **Storm surge:** over the Gale's last stretch (`StormSurge`), rain and clouds thicken, lightning strikes, gusts push the bird up or down, the storm cloud swells and pipes speed up.
 - **Pipes** are procedural: each gap is placed relative to the last, and speed, gap size and the jumps between gaps all grow through each level.
 - **The nest's tree** matches the world: a summer tree dropping leaves (Hope), a storm-bent tree that sways and sheds torn leaves (The Gale), and a frozen tree dropping snow (Extremity). See `TreeLeaves`.
+- **The Quiet** (beta-version finale, `UpdateQuiet`/`DrawQuiet`): after Extremity's last pipe the dark creeps in and `DickinsonMusic.Hush` crossfades to a melody-only copy of the theme. Flaps within the beat window (`DickinsonMusic.BeatError`, widening over time) push the dark back and write the final stanza; 12 of them break it.
 - **Cutscenes** (`StanzaRibbon`): the stanza streams in as a wave of words the bird flies through; caught words gather into the stanza at the top. Space skips. Meanwhile leftover pipes fade, the backdrop, ground, sky, particles and music cross-fade, and `WeatherFx` rolls the next world's weather in (storm clouds and rain for the Gale, snow for Extremity).
 
 ## Customize

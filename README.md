@@ -1,6 +1,6 @@
 # English Dickinson Project — beta-version
 
-> **This is the beta-version (fork).** It's the main game plus one experimental idea, "the tune without the words": the poem's *form* builds each level. Every stressed beat of a line is a pipe (so the stanzas run 13, 14 and 14 pipes in common meter's four-then-three rhythm), every dash is a breath with no pipe, pipes on rhyming lines share a colour, the level card shows each stanza's rhyme scheme (ABCB, ABAB, ABBB), and the HUD's words fall away level by level until Extremity is played with none. The main version lives at [redcappyal/EnglishDickisonProject1](https://github.com/redcappyal/EnglishDickisonProject1). The title screen shows **BETA-VERSION - 1.5.1**.
+> **This is the beta-version (fork).** It's the main game plus one experimental idea, "the tune without the words": the poem's *form* builds each level. Every stressed beat of a line is a pipe (so the stanzas run 13, 14 and 14 pipes in common meter's four-then-three rhythm), every dash is a breath with no pipe, pipes on rhyming lines share a colour, the level card shows each stanza's rhyme scheme (ABCB, ABAB, ABBB), and the HUD's words fall away level by level until Extremity is played with none. The main version lives at [redcappyal/EnglishDickisonProject1](https://github.com/redcappyal/EnglishDickisonProject1). It ends with a finale, **The Quiet**: after Extremity's last pipe a darkness creeps in from the left, the colour drains and the music thins to the bird's melody alone. Flap *on the beat* to send out light that pushes the dark back and writes the last stanza across the sky, a third of a line per beat (a ring pulses around the bird on every beat to fly by). When all four lines are lit, the dark breaks, the full music returns and dawn comes up over the frozen sea. There is no way to lose: the longer the dark lasts, the looser the timing gets, until any flap will do. The title screen shows **BETA-VERSION - 1.6.0**.
 
 A Unity 6 Flappy Bird game framework.
 
@@ -31,6 +31,7 @@ The version is shown on the title screen and the poem page. Each is tagged in gi
 | 1.4.1 | Hope never stops: no game over, score is crashes; the Gale's storm surge |
 | 1.5.0 | Smooth transitions everywhere; the tree glides in at each level; Reset Level button; rougher pipes; faster UI |
 | 1.5.1 | Skipped cutscenes fade their words out; clearer reset icon |
+| beta 1.6.0 | (beta-version only) The Quiet: a rhythm finale against the dark at the end of Extremity |
 
 A separate experimental version, **beta-version**, lives in the fork [flesheatingbacteria/EnglishDickisonProject1](https://github.com/flesheatingbacteria/EnglishDickisonProject1). It builds levels from the poem's form: meter, dashes and rhymes.
 

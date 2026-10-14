@@ -11,8 +11,8 @@ namespace FlappyBird
     {
         // "And never stops - at all -": there is no game over. GameOver is a crash: the bird
         // freezes, then flaps on. Interlude is the stanza cutscene that opens the game and
-        // links one level to the next.
-        public enum PlayState { Ready, Playing, GameOver, AwaitingFlap, Complete, Interlude }
+        // links one level to the next. Quiet is the finale at the end of Extremity.
+        public enum PlayState { Ready, Playing, GameOver, AwaitingFlap, Complete, Interlude, Quiet }
         [Header("Bird")]
         [Min(0.1f)] public float gravityScale = 2.2f;
         [Min(0.1f)] public float flapSpeed = 6.5f;
@@ -39,7 +39,7 @@ namespace FlappyBird
         public int FewestCrashes { get; private set; } = -1;
         public float Energy { get; private set; } = 100;
         // Pipes speed up within each level and from one level to the next.
-        public bool WorldMoving => State == PlayState.Playing || State == PlayState.Interlude;
+        public bool WorldMoving => State == PlayState.Playing || State == PlayState.Interlude || State == PlayState.Quiet;
         public float CurrentSpeed => pipeSpeed * (1 + 0.12f * LevelIndex + 0.1f * LevelProgress + 0.15f * StormSurge);
         // "And sore must be the storm": over the Gale's last stretch the storm throws everything it has.
         public float StormSurge => LevelIndex == 1 && (State == PlayState.Playing || State == PlayState.GameOver || State == PlayState.AwaitingFlap)
@@ -50,7 +50,7 @@ namespace FlappyBird
         private float timeScaleBeforePoem = 1f;
         private const string CreatorCredit = "Made by Alvin, Shridhar and Ishaan";
         // Shown on the title screen and poem page. See the version history in README.md.
-        public const string VersionLabel = "BETA-VERSION - 1.5.1";
+        public const string VersionLabel = "BETA-VERSION - 1.6.0";
         // Public-domain text: Academy of American Poets, poem 254 (Johnson).
         private const string PoemText =
             "Hope is the thing with feathers\n"
@@ -155,6 +155,22 @@ namespace FlappyBird
             new[] { "And sweetest - in the Gale - is heard -", "And sore must be the storm -", "That could abash the little Bird", "That kept so many warm -" },
             new[] { "I've heard it in the chillest land -", "And on the strangest Sea -", "Yet - never - in Extremity,", "It asked a crumb - of Me." }
         };
+        // Sky behind each world: dawn, storm, frozen night.
+        private static readonly Color[] LevelSky = {
+            new Color(0.78f, 0.7f, 0.92f), new Color(0.18f, 0.2f, 0.28f), new Color(0.06f, 0.09f, 0.23f)
+        };
+
+        // ---- The Quiet: hope against silence. At the end of Extremity a darkness creeps in from
+        // the left and the music thins to the bird's melody alone. Flapping on the beat sends out
+        // light that pushes the dark back and writes the last stanza across the sky, a third of a
+        // line at a time. When all four lines are lit, the dark breaks and dawn comes up.
+        private const int QuietStrokes = 12; // on-beat flaps needed: three per line
+        private float quietStart = -10, quietBreakAt = -10, quietDark, darkAtBreak, quietHush, quietWritten;
+        private int quietStrokes;
+        private struct LightPulse { public Vector2 At; public float Born; public bool Strong; }
+        private readonly System.Collections.Generic.List<LightPulse> lightPulses = new System.Collections.Generic.List<LightPulse>();
+        private static readonly Color QuietLight = new Color(1f, 0.9f, 0.62f), QuietDark = new Color(0.003f, 0.003f, 0.01f);
+
         // DickinsonMusic themes: 0 = Gale, 1 = Warmth, 2 = Sea.
         private static readonly int[] LevelMusic = { 1, 0, 2 };
         private Camera arenaCamera;
@@ -451,6 +467,7 @@ namespace FlappyBird
             AnimateScenery();
             AnimateBird();
             UpdateCrossfade();
+            UpdateQuietLook();
             shownEnergy = Mathf.MoveTowards(shownEnergy, Energy, 120 * Time.deltaTime);
             smoothSurge = Mathf.MoveTowards(smoothSurge, StormSurge, 0.35f * Time.deltaTime);
             if (showingTitle)
@@ -467,6 +484,7 @@ namespace FlappyBird
                 return;
             }
             if (State == PlayState.Interlude) { UpdateInterlude(); return; }
+            if (State == PlayState.Quiet) { UpdateQuiet(); return; }
             float surge = smoothSurge;
             weather.Surge(surge);
             storm.Surge(surge);
@@ -714,6 +732,7 @@ namespace FlappyBird
             pipesSpawned = 0;
             StartBeats();
             spawnTimer = 0.8f;
+            if (LevelIndex == 2) music.Prepare(LevelMusic[2]);
         }
 
         private float Interval => Mathf.Max(0.1f, spawnInterval - 0.1f * LevelIndex);
@@ -823,14 +842,92 @@ namespace FlappyBird
                 lineShown = -1;
                 StartInterlude(LevelIndex + 1);
             }
+            else StartQuiet();
+        }
+
+        // ---- The Quiet (finale) ----------------------------------------------------------
+
+        private void StartQuiet()
+        {
+            birdVelocity = Bird.VerticalSpeed;
+            Bird.Stop();
+            State = PlayState.Quiet;
+            quietStart = Time.time;
+            quietBreakAt = -10;
+            quietDark = quietWritten = 0;
+            quietStrokes = 0;
+            lightPulses.Clear();
+        }
+
+        private void UpdateQuiet()
+        {
+            float t = Time.time - quietStart, dt = Time.deltaTime;
+            // The world drifts on slowly; there is nothing left to crash into.
+            WorldSpeed = Mathf.MoveTowards(WorldSpeed, pipeSpeed * 0.6f, pipeSpeed * dt);
+            ScrollWorld(WorldSpeed);
+            quietWritten = Mathf.MoveTowards(quietWritten, quietStrokes, 3 * dt);
+            for (int i = lightPulses.Count - 1; i >= 0; i--)
+                if (Time.time - lightPulses[i].Born > 0.8f) lightPulses.RemoveAt(i);
+            if (quietBreakAt < 0)
+            {
+                // The dark rolls in quickly, then keeps creeping, pushing harder the more is lit;
+                // the music drains to one voice.
+                quietDark = Mathf.Min(1, quietDark + dt * (t < 3 ? 0.14f : 0.06f + 0.012f * quietStrokes));
+                quietHush = Mathf.MoveTowards(quietHush, 1, dt / 2.5f);
+                if (FlapPressed() && !PointerOverControls()) QuietFlap();
+            }
             else
             {
-                birdVelocity = Bird.VerticalSpeed;
-                Bird.Stop();
-                SaveBest();
-                completeAt = Time.unscaledTime;
-                State = PlayState.Complete;
+                // The dark breaks and slides away, and the full music comes back.
+                float since = Time.time - quietBreakAt;
+                quietDark = darkAtBreak * (1 - Mathf.SmoothStep(0, 1, since / 1.2f));
+                quietHush = Mathf.MoveTowards(quietHush, 0, dt / 1.5f);
+                if (since >= 3f)
+                {
+                    SaveBest();
+                    completeAt = Time.unscaledTime;
+                    State = PlayState.Complete;
+                }
             }
+            music.Hush(quietHush, 1 - 0.6f * quietDark);
+            GlideBird(0.4f + 0.25f * Mathf.Sin(Time.time * 1.1f));
+        }
+
+        // A wingbeat in the Quiet. On the beat it sends out light; off it, only a glimmer.
+        private void QuietFlap()
+        {
+            birdVelocity = Mathf.Max(birdVelocity, 0) + 4.5f;
+            // The beat gets easier to hit the longer the dark lasts, until any flap will do:
+            // hope never stops.
+            float window = Mathf.Min(music.BeatLength / 2, 0.11f + 0.005f * (Time.time - quietStart));
+            bool onBeat = Mathf.Abs(music.BeatError) <= window;
+            lightPulses.Add(new LightPulse { At = Bird.transform.position, Born = Time.time, Strong = onBeat });
+            if (!onBeat) { quietDark = Mathf.Max(0, quietDark - 0.03f); return; }
+            quietDark = Mathf.Max(0, quietDark - 0.14f);
+            quietStrokes++;
+            Energy = Mathf.Min(100, Energy + 100f / QuietStrokes);
+            if (quietStrokes < QuietStrokes) return;
+            quietBreakAt = Time.time;
+            darkAtBreak = quietDark;
+            shakeUntil = Time.unscaledTime + 0.25f;
+        }
+
+        // Colour drains from the world as the dark closes in, and floods back when it breaks.
+        private void UpdateQuietLook()
+        {
+            if (quietStart < 0) return;
+            float drain = quietHush * (0.5f + 0.5f * quietDark);
+            backdropArt.color = groundArt.color = Color.Lerp(Color.white, new Color(0.45f, 0.48f, 0.58f), drain);
+        }
+
+        private void EndQuiet()
+        {
+            quietStart = quietBreakAt = -10;
+            quietHush = quietDark = quietWritten = 0;
+            quietStrokes = 0;
+            lightPulses.Clear();
+            music.Hush(0);
+            backdropArt.color = groundArt.color = Color.white;
         }
 
         private void ClearPipes()
@@ -852,8 +949,7 @@ namespace FlappyBird
         private void ApplyLevel()
         {
             // 0 Hope: dawn, drifting motes. 1 The Gale: storm, wind, following storm. 2 Extremity: frozen sea, waves.
-            arenaCamera.backgroundColor = LevelIndex == 0 ? new Color(0.78f, 0.7f, 0.92f)
-                : LevelIndex == 1 ? new Color(0.18f, 0.2f, 0.28f) : new Color(0.06f, 0.09f, 0.23f);
+            arenaCamera.backgroundColor = LevelSky[LevelIndex];
             ground.color = LevelIndex == 0 ? new Color(0.78f, 0.61f, 0.42f)
                 : LevelIndex == 1 ? new Color(0.28f, 0.36f, 0.4f) : new Color(0.61f, 0.77f, 0.89f);
             grass.color = LevelIndex == 0 ? new Color(0.55f, 0.81f, 0.35f)
@@ -912,7 +1008,7 @@ namespace FlappyBird
             if (birdArt == null) return;
             if (State == PlayState.GameOver || State == PlayState.AwaitingFlap)
                 birdArt.sprite = birdHurt != null ? birdHurt : birdFrames[1];
-            else if (State == PlayState.Playing || State == PlayState.Interlude)
+            else if (State == PlayState.Playing || State == PlayState.Interlude || State == PlayState.Quiet)
             {
                 int frame = Mathf.FloorToInt(Time.time * 12) % 4; // up, mid, down, mid
                 birdArt.sprite = birdFrames[frame == 3 ? 1 : frame];
@@ -1019,6 +1115,8 @@ namespace FlappyBird
             storm.ResetStorm();
             nest.localPosition = nestStartPosition;
             nest.gameObject.SetActive(true);
+            EndQuiet();
+            if (LevelIndex == 2) music.Prepare(LevelMusic[2]);
         }
 
         // The poem page fades in and out (on unscaled time, since the game is paused under it).
@@ -1143,6 +1241,8 @@ namespace FlappyBird
                 if (interludeLevel == 1 && interludeFrom != 1 && (sinceSwap > 3.2f && sinceSwap < 3.28f || sinceSwap > 3.42f && sinceSwap < 3.52f))
                     PixelUi.Fill(screen, new Color(1, 1, 1, 0.45f));
             }
+
+            if (quietStart >= 0) DrawQuiet(width);
 
             GUI.color = hudColor;
             // The words fall away as you go: all of them on level 1, fewer on 2, none on 3.
@@ -1309,7 +1409,8 @@ namespace FlappyBird
             }
 
             // Back to this level's tree, from any point in the level.
-            if (State == PlayState.Ready || State == PlayState.Playing || State == PlayState.GameOver || State == PlayState.AwaitingFlap)
+            if (State == PlayState.Ready || State == PlayState.Playing || State == PlayState.GameOver || State == PlayState.AwaitingFlap
+                || State == PlayState.Quiet && quietBreakAt < 0)
             {
                 resetButton = new Rect(UiMargin, UiHeight - UiMargin - 42, words > 0 ? 168 : 54, 42);
                 if (Button(resetButton, words > 0 ? "RESET LEVEL" : "", 2, "reset")) DipToDark(ResetLevel);
@@ -1337,6 +1438,89 @@ namespace FlappyBird
             Color credit = new Color(1, 1, 1, 0.9f);
             PixelUi.SmallPrint(poemCredit, width - UiMargin, UiHeight - UiMargin - 30, credit, 1);
             PixelUi.SmallPrint(CreatorCredit, width - UiMargin, UiHeight - UiMargin - 15, credit, 1);
+        }
+
+        // The finale on screen: drained colour, the wall of dark, the bird's light and the last stanza.
+        private void DrawQuiet(float width)
+        {
+            Rect fullScreen = new Rect(0, 0, width, UiHeight);
+            float time = Time.time, sinceBreak = quietBreakAt < 0 ? -1 : time - quietBreakAt;
+            Vector2 bird = ToUi(Bird.transform.position);
+            float drain = quietHush * (0.5f + 0.5f * quietDark);
+            if (drain > 0) PixelUi.Fill(fullScreen, new Color(QuietDark.r, QuietDark.g, QuietDark.b, 0.35f * drain));
+
+            // Dawn comes up over the frozen sea once the dark breaks: pink to peach bands in the sky,
+            // strongest at the horizon, and a glint of it on the water.
+            float dawn = sinceBreak < 0 ? 0 : Mathf.SmoothStep(0, 1, (sinceBreak - 0.3f) / 2.5f);
+            for (int i = 0; dawn > 0 && i < 8; i++)
+                PixelUi.Fill(new Rect(0, 300 + i * 40, width, 40),
+                    new Color(1f, 0.45f + 0.04f * i, 0.62f - 0.03f * i, dawn * (0.03f + 0.03f * i)));
+            if (dawn > 0) PixelUi.Fill(new Rect(0, 620, width, 6), new Color(1f, 0.8f, 0.5f, 0.35f * dawn));
+
+            // The flash of light on each strong wingbeat lights up the edge of the dark.
+            float glow = 0;
+            foreach (LightPulse pulse in lightPulses) if (pulse.Strong) glow = Mathf.Max(glow, 1 - (time - pulse.Born) / 0.35f);
+
+            // The dark: a ragged wall from the left that stops just short of the bird.
+            float edge = Mathf.Lerp(-40, bird.x - 54, quietDark);
+            if (edge > -30)
+                for (int row = 0; row * 12 < UiHeight; row++)
+                {
+                    float y = row * 12;
+                    float x = Mathf.Round((edge + Mathf.Sin(y * 0.05f + time * 1.7f) * 14 + Mathf.Sin(y * 0.13f - time * 2.3f) * 8) / 6) * 6;
+                    if (x <= -12) continue;
+                    PixelUi.Fill(new Rect(0, y, Mathf.Max(0, x), 12), new Color(QuietDark.r, QuietDark.g, QuietDark.b, 0.95f));
+                    // A dithered fringe instead of a hard edge.
+                    PixelUi.Fill(new Rect(x, y + (row % 2) * 6, 6, 6), new Color(QuietDark.r, QuietDark.g, QuietDark.b, 0.7f));
+                    PixelUi.Fill(new Rect(x + 6, y + (1 - row % 2) * 6, 6, 6), new Color(QuietDark.r, QuietDark.g, QuietDark.b, 0.35f));
+                    if (glow > 0) PixelUi.Fill(new Rect(x - 3, y, 3, 12), new Color(QuietLight.r, QuietLight.g, QuietLight.b, 0.8f * glow));
+                }
+
+            // The bird's heartbeat: a faint ring on every beat of the music, to fly by.
+            if (sinceBreak < 0)
+            {
+                float phase = music.BeatPhase;
+                Ring(bird, 22 + 20 * phase, new Color(QuietLight.r, QuietLight.g, QuietLight.b, 0.45f * (1 - phase)));
+            }
+            foreach (LightPulse pulse in lightPulses)
+            {
+                float age = time - pulse.Born;
+                Vector2 from = ToUi(pulse.At);
+                if (pulse.Strong)
+                {
+                    Ring(from, 24 + age * 520, new Color(QuietLight.r, QuietLight.g, QuietLight.b, 0.9f * Mathf.Clamp01(1 - age / 0.8f)));
+                    Ring(from, 18 + age * 380, new Color(1, 1, 1, 0.6f * Mathf.Clamp01(1 - age / 0.6f)));
+                }
+                else Ring(from, 20 + age * 160, new Color(0.75f, 0.85f, 1f, 0.4f * Mathf.Clamp01(1 - age / 0.4f)));
+            }
+            if (sinceBreak >= 0 && sinceBreak < 0.35f) PixelUi.Fill(fullScreen, new Color(1, 1, 1, 0.7f * (1 - sinceBreak / 0.35f)));
+
+            // The last stanza, written into the sky a third of a line per strong wingbeat. Lines
+            // being written glow warm; finished lines take their rhyme colour.
+            string[] lines = Stanzas[2];
+            float size = width < 900 ? 2 : 3;
+            for (int i = 0; i < lines.Length; i++)
+            {
+                float shown = Mathf.Clamp01((quietWritten - 3 * i) / 3);
+                if (shown <= 0) break;
+                string line = lines[i].ToUpperInvariant();
+                float x = Mathf.Round((width - PixelUi.TextWidth(line, size)) / 2);
+                Color ink = shown < 1 ? QuietLight : RhymeColor(Verse[2][i].Rhyme);
+                PixelUi.Text(line.Substring(0, Mathf.CeilToInt(line.Length * shown)), x, 112 + i * 10 * size, size, ink);
+            }
+        }
+
+        // A ring of pixel squares, for pulses of light.
+        private static void Ring(Vector2 centre, float radius, Color color)
+        {
+            if (color.a <= 0) return;
+            int count = Mathf.Clamp(Mathf.RoundToInt(radius / 5), 8, 72);
+            for (int i = 0; i < count; i++)
+            {
+                float angle = i * Mathf.PI * 2 / count;
+                float x = Mathf.Round((centre.x + Mathf.Cos(angle) * radius) / 3) * 3, y = Mathf.Round((centre.y + Mathf.Sin(angle) * radius) / 3) * 3;
+                PixelUi.Fill(new Rect(x - 3, y - 3, 6, 6), color);
+            }
         }
 
         private void DrawTitle(float width)

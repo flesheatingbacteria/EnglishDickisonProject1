@@ -7,14 +7,28 @@ namespace FlappyBird
     [RequireComponent(typeof(AudioSource))]
     public sealed class DickinsonMusic : MonoBehaviour
     {
-        private AudioSource source;
-        private readonly AudioClip[] themes = new AudioClip[3];
+        private AudioSource source, voice;
+        // voice plays the melody alone, in step with the full theme, for when the music is hushed.
+        private readonly AudioClip[] themes = new AudioClip[3], melodies = new AudioClip[3];
         private int level = -1, pendingLevel = -1;
-        private float fade = 1;
+        private float fade = 1, hush, melodyLevel = 1;
         private const float BaseVolume = 0.35f, FadeTime = 0.8f;
         public int CurrentBeat => source != null && source.isPlaying && !Muted && level >= 0
             ? Mathf.FloorToInt(source.time / BeatDuration(level)) : -1;
         private static float BeatDuration(int theme) => theme == 0 ? 0.48f : theme == 1 ? 0.6f : 0.68f;
+        public float BeatLength => BeatDuration(level >= 0 ? level : 2);
+        private float Clock => source != null && source.isPlaying ? source.time : Time.unscaledTime;
+        // Seconds from the nearest beat of the playing theme (negative = early). Works while muted too.
+        public float BeatError
+        {
+            get
+            {
+                float since = Mathf.Repeat(Clock, BeatLength);
+                return since < BeatLength / 2 ? since : since - BeatLength;
+            }
+        }
+        // 0 on the beat, rising to 1 just before the next.
+        public float BeatPhase => Mathf.Repeat(Clock, BeatLength) / BeatLength;
         public bool Muted => source != null && source.mute;
 
         public void Initialize()
@@ -25,6 +39,11 @@ namespace FlappyBird
             source.spatialBlend = 0;
             source.volume = BaseVolume;
             source.ignoreListenerPause = true;
+            voice = gameObject.AddComponent<AudioSource>();
+            voice.playOnAwake = false;
+            voice.loop = true;
+            voice.spatialBlend = 0;
+            voice.ignoreListenerPause = true;
             if (FindAnyObjectByType<AudioListener>() == null)
                 Camera.main.gameObject.AddComponent<AudioListener>();
         }
@@ -54,12 +73,37 @@ namespace FlappyBird
                 if (fade <= 0) { fade = 0; Switch(pendingLevel); pendingLevel = -1; }
             }
             else fade = Mathf.Min(1, fade + step);
-            source.volume = BaseVolume * fade;
+            source.volume = BaseVolume * fade * (1 - hush);
+            if (hush > 0.001f && level >= 0)
+            {
+                Prepare(level);
+                if (voice.clip != melodies[level] || !voice.isPlaying)
+                {
+                    voice.clip = melodies[level];
+                    voice.Play();
+                    voice.timeSamples = source.timeSamples;
+                }
+                voice.volume = BaseVolume * fade * hush * melodyLevel;
+            }
+            else if (voice.isPlaying) voice.Stop();
         }
 
-        public void ToggleMute() { source.mute = !source.mute; }
+        // hush 1 leaves only the bird's melody, played at melody (0 to 1).
+        public void Hush(float amount, float melody = 1)
+        {
+            hush = Mathf.Clamp01(amount);
+            melodyLevel = Mathf.Clamp01(melody);
+        }
 
-        private static AudioClip Compose(int theme)
+        // Builds a theme's melody-only clip ahead of time, so hushing never hitches.
+        public void Prepare(int theme)
+        {
+            if (melodies[theme] == null) melodies[theme] = Compose(theme, true);
+        }
+
+        public void ToggleMute() { source.mute = voice.mute = !source.mute; }
+
+        private static AudioClip Compose(int theme, bool melodyOnly = false)
         {
             const int sampleRate = 22050;
             float beat = BeatDuration(theme);
@@ -86,13 +130,13 @@ namespace FlappyBird
                     float phase = 2 * Mathf.PI * pitch * t;
                     float birdSong = Mathf.Sin(phase + 0.018f * Mathf.Sin(t * 2 * Mathf.PI * 5))
                         + 0.2f * Mathf.Sin(phase * 2) + 0.07f * Mathf.Sin(phase * 3);
-                    float accompaniment = Mathf.Sin(2 * Mathf.PI * harmony * t)
+                    float accompaniment = melodyOnly ? 0 : Mathf.Sin(2 * Mathf.PI * harmony * t)
                         + (note % 3 == 0 ? 0.5f * Mathf.Sin(2 * Mathf.PI * bass * t) : 0);
                     // Wrap the ringing tail to make the loop seamless.
                     samples[(start + j) % count] += envelope * (birdSong * 0.13f + accompaniment * 0.065f);
                 }
             }
-            AudioClip clip = AudioClip.Create("Hope - " + new[] { "Gale", "Warmth", "Sea" }[theme], count, 1, sampleRate, false);
+            AudioClip clip = AudioClip.Create("Hope - " + new[] { "Gale", "Warmth", "Sea" }[theme] + (melodyOnly ? " (melody)" : ""), count, 1, sampleRate, false);
             clip.SetData(samples, 0);
             return clip;
         }
@@ -100,6 +144,7 @@ namespace FlappyBird
         private void OnDestroy()
         {
             foreach (AudioClip clip in themes) if (clip != null) Destroy(clip);
+            foreach (AudioClip clip in melodies) if (clip != null) Destroy(clip);
         }
     }
 }
