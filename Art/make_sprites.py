@@ -265,14 +265,14 @@ def l1_background():
     img = Image.new("RGBA", (W, H), c("#c7b3ea"))
     px = img.load()
     circle(px, 108, 60, 14, c("#ffe680"))
-    cloud(px, 10, 40, c("#ffffff"))
+    cloud(px, 20, 40, c("#ffffff"))
     cloud(px, 70, 90, c("#ffffff"))
     cloud(px, 112, 130, c("#ffffff"))
     circle(px, 30, 215, 50, c("#6cbf5a"))
     circle(px, 120, 225, 55, c("#5aa84a"))
-    house(px, 14, 166, c("#a0603a"), c("#c0392b"), c("#ffe680"))
+    house(px, 40, 166, c("#a0603a"), c("#c0392b"), c("#ffe680"))
     for i in range(4):  # smoke
-        circle(px, 28 + i, 150 - i * 7, 2, c("#eeeeee"))
+        circle(px, 54 + i, 150 - i * 7, 2, c("#eeeeee"))
     return img
 
 
@@ -296,10 +296,10 @@ def l2_background(flash=False):
     box(px, 0, 176, W, GROUND_Y, c("#233048"))
     for x in range(0, W, 12):
         box(px, x + 2, 174, x + 8, 177, c("#dfe8f2"))
-    box(px, 0, 150, 40, GROUND_Y, c("#1a1d28"))
-    house(px, 10, 138, c("#1a1d28"), c("#1a1d28"), c("#ffd860"))
+    box(px, 0, 150, 60, GROUND_Y, c("#1a1d28"))
+    house(px, 30, 138, c("#1a1d28"), c("#1a1d28"), c("#ffd860"))
     for i in range(4):  # smoke blown sideways
-        circle(px, 20 - i * 6, 126 - i, 2, c("#555d72"))
+        circle(px, 40 - i * 6, 126 - i, 2, c("#555d72"))
     return img
 
 
@@ -317,7 +317,7 @@ def l3_background():
     circle(px, 112, 101, 2, c("#c8c8dc"))
     circle(px, 119, 108, 3, c("#c8c8dc"))
     box(px, 0, 168, W, GROUND_Y, c("#1c3a6a"))
-    for x0, w0, h0 in ((8, 26, 22), (70, 18, 14), (104, 34, 30)):  # icebergs
+    for x0, w0, h0 in ((20, 26, 22), (66, 18, 14), (96, 30, 28)):  # icebergs
         for i in range(h0):
             half = w0 // 2 * (i + 1) // h0
             cx = x0 + w0 // 2
