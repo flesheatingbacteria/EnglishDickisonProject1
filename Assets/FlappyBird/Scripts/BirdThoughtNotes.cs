@@ -27,6 +27,18 @@ namespace FlappyBird
         {
             bird = singer;
             music = soundtrack;
+            Sprite noteArt = PixelArt.Prop("note", new Vector2(0.5f, 0.5f));
+            if (noteArt != null)
+            {
+                for (int i = 0; i < notes.Length; i++)
+                {
+                    Transform root = new GameObject("Bird's Thought Note").transform;
+                    root.SetParent(transform, false);
+                    notes[i] = new Note { Root = root, Pieces = new[] { Piece(root, noteArt, Vector2.zero, Vector2.one) }, Phase = i * 1.7f };
+                    root.gameObject.SetActive(false);
+                }
+                return;
+            }
             headTexture = new Texture2D(32, 32, TextureFormat.RGBA32, false);
             headTexture.filterMode = FilterMode.Bilinear;
             headTexture.wrapMode = TextureWrapMode.Clamp;

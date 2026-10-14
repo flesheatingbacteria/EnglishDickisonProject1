@@ -19,6 +19,9 @@ namespace FlappyBird
 
         public static Sprite Bird(string frame) => Load("bird/bird_" + frame, new Vector2(0.5f, 0.5f));
 
+        // Decorations shared by all levels: nest, branch, storm cloud, lightning, notes.
+        public static Sprite Prop(string name, Vector2 pivot) => Load("props/" + name, pivot);
+
         // Pivot on the top edge of the ground's grass line.
         public static Sprite Ground(int level) => Load(Folder(level) + "/ground", new Vector2(0.5f, 1));
 

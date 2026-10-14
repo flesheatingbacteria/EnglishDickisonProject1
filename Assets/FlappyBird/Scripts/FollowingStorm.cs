@@ -16,27 +16,39 @@ namespace FlappyBird
         public void Initialize(FlappyBirdGame owner, Sprite square)
         {
             game = owner;
-            cloudTexture = new Texture2D(64, 64, TextureFormat.RGBA32, false);
-            cloudTexture.filterMode = FilterMode.Bilinear;
-            for (int y = 0; y < 64; y++)
-                for (int x = 0; x < 64; x++)
-                {
-                    float distance = Vector2.Distance(new Vector2(x, y), new Vector2(31.5f, 31.5f));
-                    cloudTexture.SetPixel(x, y, new Color(1, 1, 1, Mathf.Clamp01(31.5f - distance)));
-                }
-            cloudTexture.Apply();
-            cloudSprite = Sprite.Create(cloudTexture, new Rect(0, 0, 64, 64), new Vector2(0.5f, 0.5f), 64);
-            Color dark = new Color(0.22f, 0.25f, 0.34f);
-            Piece("Cloud Base", cloudSprite, new Vector2(0, 0.15f), new Vector2(1.65f, 0.62f), dark, 0);
-            Piece("Cloud Left", cloudSprite, new Vector2(-0.5f, 0.33f), new Vector2(0.68f, 0.67f), dark, 0);
-            Piece("Cloud Crown", cloudSprite, new Vector2(-0.1f, 0.53f), new Vector2(0.88f, 0.82f), dark, 0);
-            Piece("Cloud Right", cloudSprite, new Vector2(0.43f, 0.37f), new Vector2(0.76f, 0.72f), dark, 0);
+            Sprite cloudArt = PixelArt.Prop("storm_cloud", new Vector2(0.5f, 0.5f));
+            if (cloudArt != null) Piece("Cloud", cloudArt, new Vector2(0, 0.35f), Vector2.one, Color.white, 0);
+            else
+            {
+                cloudTexture = new Texture2D(64, 64, TextureFormat.RGBA32, false);
+                cloudTexture.filterMode = FilterMode.Bilinear;
+                for (int y = 0; y < 64; y++)
+                    for (int x = 0; x < 64; x++)
+                    {
+                        float distance = Vector2.Distance(new Vector2(x, y), new Vector2(31.5f, 31.5f));
+                        cloudTexture.SetPixel(x, y, new Color(1, 1, 1, Mathf.Clamp01(31.5f - distance)));
+                    }
+                cloudTexture.Apply();
+                cloudSprite = Sprite.Create(cloudTexture, new Rect(0, 0, 64, 64), new Vector2(0.5f, 0.5f), 64);
+                Color dark = new Color(0.22f, 0.25f, 0.34f);
+                Piece("Cloud Base", cloudSprite, new Vector2(0, 0.15f), new Vector2(1.65f, 0.62f), dark, 0);
+                Piece("Cloud Left", cloudSprite, new Vector2(-0.5f, 0.33f), new Vector2(0.68f, 0.67f), dark, 0);
+                Piece("Cloud Crown", cloudSprite, new Vector2(-0.1f, 0.53f), new Vector2(0.88f, 0.82f), dark, 0);
+                Piece("Cloud Right", cloudSprite, new Vector2(0.43f, 0.37f), new Vector2(0.76f, 0.72f), dark, 0);
+            }
 
             rain = new Transform[12];
             for (int i = 0; i < rain.Length; i++)
             {
                 rain[i] = Piece("Rain", square, Vector2.zero, new Vector2(0.025f, 0.16f), new Color(0.67f, 0.86f, 1, 0.75f), 1).transform;
                 rain[i].localRotation = Quaternion.Euler(0, 0, -15);
+            }
+            Sprite boltArt = PixelArt.Prop("bolt", new Vector2(0.5f, 1));
+            if (boltArt != null)
+            {
+                lightning = Piece("Lightning", boltArt, new Vector2(0.05f, 0.02f), Vector2.one, Color.white, 2);
+                ResetStorm();
+                return;
             }
             lightning = new GameObject("Lightning");
             lightning.transform.SetParent(transform, false);

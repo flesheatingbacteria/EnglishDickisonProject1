@@ -130,6 +130,12 @@ FONT = {
     "8": ["###", "#.#", "###", "#.#", "###"], "9": ["###", "#.#", "###", "..#", "##."],
     "-": ["...", "...", "###", "...", "..."], ",": [".", ".", ".", "#", "#"],
     ".": [".", ".", ".", ".", "#"], "'": ["#", "#", ".", ".", "."], '"': ["#.#", "#.#", "...", "...", "..."],
+    "J": ["..#", "..#", "..#", "#.#", ".#."], "Q": [".#.", "#.#", "#.#", "##.", ".##"],
+    "Z": ["###", "..#", ".#.", "#..", "###"], "!": ["#", "#", "#", ".", "#"],
+    "?": ["##.", "..#", ".#.", "...", ".#."], ":": [".", "#", ".", "#", "."],
+    ";": [".", "#", ".", "#", "#"], "/": ["..#", "..#", ".#.", "#..", "#.."],
+    "(": [".#", "#.", "#.", "#.", ".#"], ")": ["#.", ".#", ".#", ".#", "#."],
+    "|": ["#", "#", "#", "#", "#"],
     " ": ["..", "..", "..", "..", ".."],
 }
 
@@ -470,6 +476,106 @@ def build(level, birds, hurt):
     frames[0].save(f"{prev}/gameplay.gif", save_all=True, append_images=frames[1:], duration=60, loop=0)
 
 
+# ------------------------------------------------------------------ UI + props
+# 9-slice frames: K outline, L rim, D inner band, F fill. Borders are 3px.
+def frame(rows, pal):
+    return draw_map(rows, pal)
+
+
+FRAME_ROWS = [
+    ".KKKKKKKKKK.",
+    "KLLLLLLLLLLK",
+    "KLDDDDDDDDLK",
+    "KLDFFFFFFDLK",
+    "KLDFFFFFFDLK",
+    "KLDFFFFFFDLK",
+    "KLDFFFFFFDLK",
+    "KLDFFFFFFDLK",
+    "KLDFFFFFFDLK",
+    "KLDDDDDDDDLK",
+    "KLLLLLLLLLLK",
+    ".KKKKKKKKKK.",
+]
+BUTTON_ROWS = [
+    ".KKKKKKKKKK.",
+    "KHHHHHHHHHHK",
+    "KHFFFFFFFFFK",
+    "KFFFFFFFFFFK",
+    "KFFFFFFFFFFK",
+    "KFFFFFFFFFFK",
+    "KFFFFFFFFFFK",
+    "KFFFFFFFFFFK",
+    "KFFFFFFFFFFK",
+    "KSSSSSSSSSSK",
+    "KSSSSSSSSSSK",
+    ".KKKKKKKKKK.",
+]
+SCREEN_ROWS = [
+    "KKKKKKKKKKKK",
+    "KKKKKKKKKKKK",
+    "KKLLLLLLLLKK",
+    "KKLKKKKKKLKK",
+    "KKLK....KLKK",
+    "KKLK....KLKK",
+    "KKLK....KLKK",
+    "KKLK....KLKK",
+    "KKLKKKKKKLKK",
+    "KKLLLLLLLLKK",
+    "KKKKKKKKKKKK",
+    "KKKKKKKKKKKK",
+]
+
+
+def ui_sprites():
+    ink = c("#141018")
+    out = {
+        "panel": frame(FRAME_ROWS, {"K": ink, "L": c("#f2e6c8"), "D": c("#3a3550"), "F": (35, 32, 58, 235)}),
+        "parchment": frame(FRAME_ROWS, {"K": c("#3a2418"), "L": c("#8a5a3a"), "D": c("#d8c8a0"), "F": c("#f2e6c8")}),
+        "bar": frame(FRAME_ROWS, {"K": ink, "L": c("#f2e6c8"), "D": ink, "F": ink}),
+        "button": frame(BUTTON_ROWS, {"K": ink, "H": c("#ffe2a0"), "F": c("#ffb84a"), "S": c("#c8782a")}),
+        "button_hover": frame(BUTTON_ROWS, {"K": ink, "H": c("#fff0c8"), "F": c("#ffcc70"), "S": c("#d88a3a")}),
+        "screen_frame": frame(SCREEN_ROWS, {"K": c("#1a1726"), "L": c("#f2e6c8")}),
+        "feather": with_outline(draw_map([
+            "......YY", ".....YWY", "....YWY.", "...YWY..", "..YWY...", ".YWY....", ".YY.....", "Y......."],
+            {"Y": c("#ffd84a"), "W": c("#fff2b0")})),
+        "pip_on": with_outline(draw_map([".##.", "#WY#", "#YY#", ".##."], {"#": c("#ffb84a"), "Y": c("#ffd84a"), "W": c("#fff2b0")})),
+        "pip_off": with_outline(draw_map([".##.", "#..#", "#..#", ".##."], {"#": c("#5a5470"), ".": c("#2a2640")})),
+    }
+    out["pip_off"].putpixel((1, 1), (0, 0, 0, 0)); out["pip_off"].putpixel((4, 1), (0, 0, 0, 0))
+    return out
+
+
+def prop_sprites():
+    note = with_outline(draw_map(["...##", "...#.#", "...#..", ".###..", "####..", ".##..."], {"#": c("#ffffff")}))
+    bolt = with_outline(draw_map(["..YYY", "..YY.", ".YY..", ".YYYY", "..YY.", ".YY..", "YY...", "Y...."],
+                                 {"Y": c("#ffe866")}))
+    cloud = Image.new("RGBA", (40, 20), CLEAR)
+    px = cloud.load()
+    puffs = [(10, 12, 6), (19, 8, 8), (29, 11, 6), (14, 14, 5), (25, 14, 5)]
+    for cx, cy, r in puffs:
+        circle(px, cx, cy, r, c("#4a4f63"), 40, 20)
+    for cx, cy, r in puffs[:3]:
+        circle(px, cx - 2, cy - 2, r // 2, c("#5e6479"), 40, 20)
+    box(px, 0, 18, 40, 20, CLEAR, 40, 20)
+    outline(cloud)
+    nest = Image.new("RGBA", (28, 11), CLEAR)
+    px = nest.load()
+    for x in range(1, 27):
+        depth = int(8 * (1 - ((x - 13.5) / 13.5) ** 2)) + 1
+        for y in range(1, 1 + depth):
+            px[x, y] = c("#c89a5a") if (x + y * 2) % 5 < 2 else c("#8a5a2e") if (x + y) % 3 else c("#5a3418")
+    for x0, y0 in ((4, 0), (11, 0), (19, 0), (24, 1)):  # sticks poking out of the rim
+        px[x0, y0] = c("#8a5a2e")
+    outline(nest)
+    branch = Image.new("RGBA", (12, 5), CLEAR)
+    px = branch.load()
+    box(px, 0, 0, 12, 5, BLACK, 12, 5)
+    box(px, 0, 1, 12, 4, c("#6e4826"), 12, 5)
+    box(px, 0, 1, 12, 2, c("#8a5a2e"), 12, 5)
+    px[4, 2] = c("#4a2c16"); px[9, 3] = c("#4a2c16")
+    return {"note": note, "bolt": bolt, "storm_cloud": cloud, "nest": nest, "branch": branch}
+
+
 def main():
     birds = {f: make_bird(f) for f in ("up", "mid", "down")}
     hurt = make_bird("down", hurt=True)
@@ -483,6 +589,12 @@ def main():
     for level in LEVELS:
         build(level, birds, hurt)
         print("built", level["folder"])
+    for group, sprites in (("ui", ui_sprites()), ("props", prop_sprites())):
+        for folder in (os.path.join(SPRITES, group), os.path.join(GAME, group)):
+            os.makedirs(folder, exist_ok=True)
+            for name, im in sprites.items():
+                im.save(os.path.join(folder, name + ".png"))
+        print("built", group)
 
 
 if __name__ == "__main__":
