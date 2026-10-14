@@ -251,86 +251,126 @@ def l3_pipe(length, top):
 
 
 # ------------------------------------------------------------------ backgrounds
-def cloud(px, x, y, col):
-    box(px, x + 4, y, x + 14, y + 4, col)
-    box(px, x, y + 3, x + 22, y + 9, col)
-    box(px, x + 12, y - 2, x + 19, y + 4, col)
+# Backgrounds are wider than the 144px screen so wide monitors see more scenery, not
+# mirrored copies of the landmarks. The original 144px composition sits in the middle.
+BG_W = 512
+MID = (BG_W - W) // 2
 
 
-def house(px, x, y, wall, roof, win):
-    box(px, x, y, x + 16, y + 12, wall)
+def cloud(px, x, y, col, w=W):
+    box(px, x + 4, y, x + 14, y + 4, col, w)
+    box(px, x, y + 3, x + 22, y + 9, col, w)
+    box(px, x + 12, y - 2, x + 19, y + 4, col, w)
+
+
+def house(px, x, y, wall, roof, win, w=W):
+    box(px, x, y, x + 16, y + 12, wall, w)
     for i in range(7):
-        box(px, x - 1 + i, y - 1 - i, x + 17 - i, y - i, roof)
-    box(px, x + 12, y - 9, x + 15, y - 3, roof)
-    box(px, x + 3, y + 3, x + 6, y + 6, win)
-    box(px, x + 10, y + 3, x + 13, y + 6, win)
-    box(px, x + 7, y + 6, x + 10, y + 12, c("#4a2a1a"))
+        box(px, x - 1 + i, y - 1 - i, x + 17 - i, y - i, roof, w)
+    box(px, x + 12, y - 9, x + 15, y - 3, roof, w)
+    box(px, x + 3, y + 3, x + 6, y + 6, win, w)
+    box(px, x + 10, y + 3, x + 13, y + 6, win, w)
+    box(px, x + 7, y + 6, x + 10, y + 12, c("#4a2a1a"), w)
+
+
+# Backgrounds wrap around: the right edge continues into the left, so the game can
+# scroll them forever. Wrapped drawing helpers below keep every shape seamless.
+def wbox(px, x0, y0, x1, y1, col):
+    for y in range(max(0, y0), min(H, y1)):
+        for x in range(x0, x1):
+            px[x % BG_W, y] = col
+
+
+def wcircle(px, cx, cy, r, col):
+    for y in range(max(0, cy - r), min(H, cy + r + 1)):
+        for x in range(cx - r, cx + r + 1):
+            if (x - cx) ** 2 + (y - cy) ** 2 <= r * r + r:
+                px[x % BG_W, y] = col
+
+
+def wcloud(px, x, y, col):
+    wbox(px, x + 4, y, x + 14, y + 4, col)
+    wbox(px, x, y + 3, x + 22, y + 9, col)
+    wbox(px, x + 12, y - 2, x + 19, y + 4, col)
+
+
+def whouse(px, x, y, wall, roof, win):
+    wbox(px, x, y, x + 16, y + 12, wall)
+    for i in range(7):
+        wbox(px, x - 1 + i, y - 1 - i, x + 17 - i, y - i, roof)
+    wbox(px, x + 12, y - 9, x + 15, y - 3, roof)
+    wbox(px, x + 3, y + 3, x + 6, y + 6, win)
+    wbox(px, x + 10, y + 3, x + 13, y + 6, win)
+    wbox(px, x + 7, y + 6, x + 10, y + 12, c("#4a2a1a"))
 
 
 def l1_background():
-    img = Image.new("RGBA", (W, H), c("#c7b3ea"))
+    img = Image.new("RGBA", (BG_W, H), c("#c7b3ea"))
     px = img.load()
-    circle(px, 108, 60, 14, c("#ffe680"))
-    cloud(px, 20, 40, c("#ffffff"))
-    cloud(px, 70, 90, c("#ffffff"))
-    cloud(px, 112, 130, c("#ffffff"))
-    circle(px, 30, 215, 50, c("#6cbf5a"))
-    circle(px, 120, 225, 55, c("#5aa84a"))
-    house(px, 40, 166, c("#a0603a"), c("#c0392b"), c("#ffe680"))
+    wcircle(px, MID + 108, 60, 14, c("#ffe680"))
+    for x, y in ((14, 70), (70, 30), (130, 110), (MID + 20, 40), (MID + 70, 90), (MID + 112, 130),
+                 (360, 56), (412, 104), (470, 36), (500, 140)):
+        wcloud(px, x, y, c("#ffffff"))
+    for x, y, r, col in ((40, 226, 50, "#6cbf5a"), (128, 222, 46, "#5aa84a"), (MID + 30, 215, 50, "#6cbf5a"),
+                         (MID + 120, 225, 55, "#5aa84a"), (384, 220, 48, "#6cbf5a"), (470, 226, 52, "#5aa84a")):
+        wcircle(px, x, y, r, c(col))
+    whouse(px, MID + 40, 166, c("#a0603a"), c("#c0392b"), c("#ffe680"))
     for i in range(4):  # smoke
-        circle(px, 54 + i, 150 - i * 7, 2, c("#eeeeee"))
+        wcircle(px, MID + 54 + i, 150 - i * 7, 2, c("#eeeeee"))
     return img
 
 
 def l2_background(flash=False):
-    img = Image.new("RGBA", (W, H), c("#4a5270" if flash else "#2d3348"))
+    img = Image.new("RGBA", (BG_W, H), c("#4a5270" if flash else "#2d3348"))
     px = img.load()
-    for x, y in ((-6, 6), (30, 0), (70, 10), (108, 2)):
-        cloud(px, x, y, c("#555d72"))
+    for x in range(0, BG_W, 32):
+        wcloud(px, x - 6, 6 if (x // 32) % 2 else 0, c("#555d72"))
     rnd = random.Random(2)
-    for _ in range(40):
-        x, y = rnd.randrange(W), rnd.randrange(30, 180)
+    for _ in range(140):
+        x, y = rnd.randrange(BG_W), rnd.randrange(30, 180)
         for i in range(4):
-            if 0 <= x - i // 2 < W:
-                px[x - i // 2, y + i] = c("#56607e")
-    pts = [(100, 20), (92, 46), (102, 46), (90, 80)]
+            px[(x - i // 2) % BG_W, y + i] = c("#56607e")
+    pts = [(MID + 100, 20), (MID + 92, 46), (MID + 102, 46), (MID + 90, 80)]
     for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
         n = max(abs(x1 - x0), abs(y1 - y0))
         for t in range(n + 1):
-            box(px, round(x0 + (x1 - x0) * t / n), round(y0 + (y1 - y0) * t / n),
-                round(x0 + (x1 - x0) * t / n) + 2, round(y0 + (y1 - y0) * t / n) + 1, c("#ffe866"))
-    box(px, 0, 176, W, GROUND_Y, c("#233048"))
-    for x in range(0, W, 12):
-        box(px, x + 2, 174, x + 8, 177, c("#dfe8f2"))
-    box(px, 0, 150, 60, GROUND_Y, c("#1a1d28"))
-    house(px, 30, 138, c("#1a1d28"), c("#1a1d28"), c("#ffd860"))
+            x, y = round(x0 + (x1 - x0) * t / n), round(y0 + (y1 - y0) * t / n)
+            wbox(px, x, y, x + 2, y + 1, c("#ffe866"))
+    wbox(px, 0, 176, BG_W, GROUND_Y, c("#233048"))
+    for x in range(0, BG_W, 16):
+        wbox(px, x + 2, 174, x + 9, 177, c("#dfe8f2"))
+    for dx, top in ((-24, 184), (-16, 172), (-8, 160), (0, 150)):  # the cliff steps up from the sea
+        wbox(px, MID + dx, top, MID + 60, GROUND_Y, c("#1a1d28"))
+    wbox(px, MID + 60, 162, MID + 70, GROUND_Y, c("#1a1d28"))
+    whouse(px, MID + 30, 138, c("#1a1d28"), c("#1a1d28"), c("#ffd860"))
     for i in range(4):  # smoke blown sideways
-        circle(px, 40 - i * 6, 126 - i, 2, c("#555d72"))
+        wcircle(px, MID + 40 - i * 6, 126 - i, 2, c("#555d72"))
     return img
 
 
 def l3_background():
-    img = Image.new("RGBA", (W, H), c("#10183a"))
+    img = Image.new("RGBA", (BG_W, H), c("#10183a"))
     px = img.load()
     rnd = random.Random(3)
-    for _ in range(45):
-        px[rnd.randrange(W), rnd.randrange(150)] = c("#ffffff")
-    for band, col, y0 in ((0, "#3fe0a0", 50), (1, "#2aa0c0", 60)):  # aurora
-        for x in range(W):
-            y = y0 + int(math.sin(x / 14 + band) * 8)
-            box(px, x, y, x + 1, y + 4, c(col))
-    circle(px, 116, 104, 11, c("#f4f4ff"))
-    circle(px, 112, 101, 2, c("#c8c8dc"))
-    circle(px, 119, 108, 3, c("#c8c8dc"))
-    box(px, 0, 168, W, GROUND_Y, c("#1c3a6a"))
-    for x0, w0, h0 in ((20, 26, 22), (66, 18, 14), (96, 30, 28)):  # icebergs
+    for _ in range(160):
+        px[rnd.randrange(BG_W), rnd.randrange(150)] = c("#ffffff")
+    for band, col, y0 in ((0, "#3fe0a0", 50), (1, "#2aa0c0", 60)):  # aurora, 6 waves per loop
+        for x in range(BG_W):
+            y = y0 + int(math.sin(x * math.tau * 6 / BG_W + band) * 8)
+            wbox(px, x, y, x + 1, y + 4, c(col))
+    wcircle(px, MID + 116, 104, 11, c("#f4f4ff"))
+    wcircle(px, MID + 112, 101, 2, c("#c8c8dc"))
+    wcircle(px, MID + 119, 108, 3, c("#c8c8dc"))
+    wbox(px, 0, 168, BG_W, GROUND_Y, c("#1c3a6a"))
+    for x0, w0, h0 in ((8, 22, 16), (70, 30, 26), (130, 16, 10), (MID + 20, 26, 22), (MID + 66, 18, 14),
+                       (MID + 96, 30, 28), (352, 20, 12), (400, 34, 30), (480, 24, 18)):  # icebergs
         for i in range(h0):
             half = w0 // 2 * (i + 1) // h0
             cx = x0 + w0 // 2
-            box(px, cx - half, 168 - h0 + i, cx, 169 - h0 + i, c("#e6f4ff"))
-            box(px, cx, 168 - h0 + i, cx + half, 169 - h0 + i, c("#a8cce8"))
-    for x in range(0, W, 10):
-        box(px, x, 178 + (x // 10) % 3 * 6, x + 4, 179 + (x // 10) % 3 * 6, c("#3a6aa0"))
+            wbox(px, cx - half, 168 - h0 + i, cx, 169 - h0 + i, c("#e6f4ff"))
+            wbox(px, cx, 168 - h0 + i, cx + half, 169 - h0 + i, c("#a8cce8"))
+    for x in range(0, BG_W, 8):
+        wbox(px, x, 178 + (x // 8) % 4 * 5, x + 4, 179 + (x // 8) % 4 * 5, c("#3a6aa0"))
     return img
 
 
@@ -404,17 +444,21 @@ def build(level, birds, hurt):
     prev = os.path.join(PREVIEWS, level["folder"])
     os.makedirs(out, exist_ok=True)
     os.makedirs(prev, exist_ok=True)
-    bg, gr, fn = level["bg"](), level["ground"](), level["pipe"]
+    n = level["n"]
+    wide = scuff(level["bg"](), 20 + n, shape=False, tint=0.015)
+    gr = scuff(level["ground"](), 30 + n, shape=False, tint=0.04)
+    fn = lambda length, top, make=level["pipe"]: scuff(make(length, top), 40 + n, shape=False, tint=0.04)
+    bg = wide.crop((MID, 0, MID + W, H))
     title = text(level["title"], level["title_col"], scale=3 if len(level["title"]) < 9 else 2)
 
-    bg.save(f"{out}/background.png")
+    wide.save(f"{out}/background.png")
     gr.save(f"{out}/ground.png")
     fn(160, True).save(f"{out}/pipe_top.png")
     fn(160, False).save(f"{out}/pipe_bottom.png")
     level["pickup"].save(f"{out}/pickup.png")
     game = os.path.join(GAME, level["folder"])
     os.makedirs(game, exist_ok=True)
-    bg.save(f"{game}/background.png")
+    wide.save(f"{game}/background.png")
     gr.save(f"{game}/ground.png")
     gtop, gbottom = game_pipes(fn)
     gtop.save(f"{game}/pipe_top.png")
@@ -459,7 +503,7 @@ def build(level, birds, hurt):
     # gif
     seq = ["up", "mid", "down", "mid"]
     pairs = [pipe_pair(fn, 0, gy) for gy in (60, 94, 74)]
-    flash = level["flash"]() if "flash" in level else None
+    flash = level["flash"]().crop((MID, 0, MID + W, H)) if "flash" in level else None
     frames = []
     for i in range(60):
         f = (flash if flash and i in (34, 36) else bg).copy()
@@ -474,6 +518,37 @@ def build(level, birds, hurt):
         paste(f, s, (W - s.width) // 2, 14)
         frames.append(big(f, 3).convert("RGB").quantize(colors=64, dither=Image.NONE))
     frames[0].save(f"{prev}/gameplay.gif", save_all=True, append_images=frames[1:], duration=60, loop=0)
+
+
+# ------------------------------------------------------------------ scuffing
+def _noise(x, y, salt):
+    n = (x * 374761393 + y * 668265263 + salt * 2147483647) & 0xFFFFFFFF
+    n = (n ^ (n >> 13)) * 1274126177 & 0xFFFFFFFF
+    return (n ^ (n >> 16)) / 0xFFFFFFFF
+
+
+def scuff(img, salt, shape=True, tint=0.05):
+    """Hand-made wobble: a few colours a shade off, and (if shape) a few outline pixels
+    dropped or doubled. Tiling art should pass shape=False so its edges still match."""
+    img = img.copy()
+    px = img.load()
+    w, h = img.size
+    for y in range(h):
+        for x in range(w):
+            r, g, b, a = px[x, y]
+            if a == 0:
+                continue
+            if px[x, y] != BLACK and _noise(x, y, salt) < tint:
+                d = 14 if _noise(y, x, salt + 1) < 0.5 else -14
+                px[x, y] = (max(0, min(255, r + d)), max(0, min(255, g + d)), max(0, min(255, b + d)), a)
+            elif shape and px[x, y] == BLACK and _noise(x, y, salt + 2) < 0.04:
+                # nudge this outline pixel one step outward, as if drawn a bit freehand
+                for dx, dy in ((0, -1), (1, 0), (0, 1), (-1, 0)):
+                    nx, ny = x + dx, y + dy
+                    if 0 <= nx < w and 0 <= ny < h and px[nx, ny][3] == 0:
+                        px[nx, ny] = BLACK
+                        break
+    return img
 
 
 # ------------------------------------------------------------------ UI + props
@@ -526,6 +601,19 @@ SCREEN_ROWS = [
 ]
 
 
+def heart():
+    return with_outline(draw_map([
+        ".RR..RRR.",
+        "RWWRRRRRR",
+        "RWRRRRRRR",
+        "RRRRRRRRD",
+        ".RRRRRRD.",
+        "..RRRRD..",
+        "...RRD...",
+        "....R....",
+    ], {"R": c("#e8403a"), "W": c("#ffd0c8"), "D": c("#a82828")}))
+
+
 def ui_sprites():
     ink = c("#141018")
     out = {
@@ -538,10 +626,8 @@ def ui_sprites():
         "feather": with_outline(draw_map([
             "......YY", ".....YWY", "....YWY.", "...YWY..", "..YWY...", ".YWY....", ".YY.....", "Y......."],
             {"Y": c("#ffd84a"), "W": c("#fff2b0")})),
-        "pip_on": with_outline(draw_map([".##.", "#WY#", "#YY#", ".##."], {"#": c("#ffb84a"), "Y": c("#ffd84a"), "W": c("#fff2b0")})),
-        "pip_off": with_outline(draw_map([".##.", "#..#", "#..#", ".##."], {"#": c("#5a5470"), ".": c("#2a2640")})),
+        "heart": heart(),
     }
-    out["pip_off"].putpixel((1, 1), (0, 0, 0, 0)); out["pip_off"].putpixel((4, 1), (0, 0, 0, 0))
     return out
 
 
@@ -573,12 +659,54 @@ def prop_sprites():
     box(px, 0, 1, 12, 4, c("#6e4826"), 12, 5)
     box(px, 0, 1, 12, 2, c("#8a5a2e"), 12, 5)
     px[4, 2] = c("#4a2c16"); px[9, 3] = c("#4a2c16")
-    return {"note": note, "bolt": bolt, "storm_cloud": cloud, "nest": nest, "branch": branch}
+    # tree that holds the nest: a trunk that tiles upward, and one crown per world
+    trunk = Image.new("RGBA", (12, 8), CLEAR)
+    px = trunk.load()
+    box(px, 0, 0, 1, 8, BLACK, 12, 8); box(px, 11, 0, 12, 8, BLACK, 12, 8)
+    box(px, 1, 0, 4, 8, c("#8a5a2e"), 12, 8); box(px, 4, 0, 9, 8, c("#6e4826"), 12, 8); box(px, 9, 0, 11, 8, c("#4a2c16"), 12, 8)
+    px[5, 2] = c("#4a2c16"); px[6, 3] = c("#4a2c16"); px[3, 6] = c("#a8784a")
+
+    # cherry blossom crowns: full bloom, storm-thinned, and snow-dusted
+    def crown(level):
+        img = Image.new("RGBA", (56, 40), CLEAR)
+        q = img.load()
+        for x0, y0, x1, y1 in ((28, 39, 28, 22), (28, 26, 14, 14), (28, 24, 44, 12), (28, 22, 26, 8), (20, 18, 8, 18), (36, 16, 50, 18)):
+            n = max(abs(x1 - x0), abs(y1 - y0))
+            for t in range(n + 1):
+                x, y = round(x0 + (x1 - x0) * t / n), round(y0 + (y1 - y0) * t / n)
+                box(q, x - 1, y, x + 1, y + 1, c("#5a3420"), 56, 40)
+        rnd = random.Random(70 + level)
+        puffs = [(14, 18, 10), (28, 11, 12), (42, 18, 10), (21, 25, 9), (35, 25, 9), (6, 22, 6), (50, 22, 6)]
+        if level == 1:  # the gale has stripped it half bare
+            puffs = [p for i, p in enumerate(puffs) if i in (1, 2, 4, 6)]
+        pink, light, dark = (("#f7b6c8", "#ffd8e4", "#d98aa2"), ("#d98aa2", "#f0b0c4", "#a8607a"), ("#f2b8ca", "#ffe0ea", "#c98ba0"))[level]
+        for cx, cy, r in puffs:
+            circle(q, cx, cy, r, c(pink), 56, 40)
+        for cx, cy, r in puffs:
+            circle(q, cx - r // 3, cy - r // 3, r // 2, c(light), 56, 40)
+        for _ in range(40):  # individual blossoms and shadows
+            x, y = rnd.randrange(56), rnd.randrange(40)
+            if q[x, y][3] and q[x, y] != c("#5a3420"):
+                q[x, y] = c(dark) if rnd.random() < 0.5 else c("#ffffff")
+        if level == 2:  # snow settled on top
+            for cx, cy, r in puffs:
+                for y in range(cy - r, cy - r // 3):
+                    for x in range(cx - r, cx + r + 1):
+                        if 0 <= x < 56 and 0 <= y < 40 and q[x, y][3] and (x - cx) ** 2 + (y - cy) ** 2 <= r * r:
+                            q[x, y] = c("#f4f8ff")
+        outline(img)
+        return img
+
+    feather_bit = with_outline(draw_map(["..LL", "LLD.", "D..."], {"L": c("#c9935a"), "D": c("#6e4826")}))
+    return {"note": note, "bolt": bolt, "storm_cloud": cloud, "nest": nest, "branch": branch, "heart": heart(),
+            "tree_trunk": trunk, "feather_bit": feather_bit,
+            "crown_0": crown(0), "crown_1": crown(1), "crown_2": crown(2),
+            "petal": with_outline(draw_map(["PP.", ".PL"], {"P": c("#f7a8bf"), "L": c("#ffe0ea")}))}
 
 
 def main():
-    birds = {f: make_bird(f) for f in ("up", "mid", "down")}
-    hurt = make_bird("down", hurt=True)
+    birds = {f: scuff(make_bird(f), 11) for f in ("up", "mid", "down")}
+    hurt = scuff(make_bird("down", hurt=True), 11)
     os.makedirs(os.path.join(SPRITES, "bird"), exist_ok=True)
     for f, b in birds.items():
         b.save(os.path.join(SPRITES, "bird", f"bird_{f}.png"))
@@ -592,8 +720,9 @@ def main():
     for group, sprites in (("ui", ui_sprites()), ("props", prop_sprites())):
         for folder in (os.path.join(SPRITES, group), os.path.join(GAME, group)):
             os.makedirs(folder, exist_ok=True)
-            for name, im in sprites.items():
-                im.save(os.path.join(folder, name + ".png"))
+            for i, (name, im) in enumerate(sprites.items()):
+                tiles = name in ("panel", "parchment", "bar", "button", "button_hover", "screen_frame", "branch", "tree_trunk")
+                scuff(im, 60 + i, shape=not tiles, tint=0.03 if tiles else 0.05).save(os.path.join(folder, name + ".png"))
         print("built", group)
 
 

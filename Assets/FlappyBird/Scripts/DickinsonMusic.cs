@@ -9,7 +9,9 @@ namespace FlappyBird
     {
         private AudioSource source;
         private readonly AudioClip[] themes = new AudioClip[3];
-        private int level = -1;
+        private int level = -1, pendingLevel = -1;
+        private float fade = 1;
+        private const float BaseVolume = 0.35f, FadeTime = 0.8f;
         public int CurrentBeat => source != null && source.isPlaying && !Muted && level >= 0
             ? Mathf.FloorToInt(source.time / BeatDuration(level)) : -1;
         private static float BeatDuration(int theme) => theme == 0 ? 0.48f : theme == 1 ? 0.6f : 0.68f;
@@ -21,19 +23,38 @@ namespace FlappyBird
             source.playOnAwake = false;
             source.loop = true;
             source.spatialBlend = 0;
-            source.volume = 0.35f;
+            source.volume = BaseVolume;
             source.ignoreListenerPause = true;
             if (FindAnyObjectByType<AudioListener>() == null)
                 Camera.main.gameObject.AddComponent<AudioListener>();
         }
 
+        // Fades the current theme out before the new one starts.
         public void SetLevel(int index)
         {
-            if (level == index && source.isPlaying) return;
+            if (index == level && source.isPlaying) { pendingLevel = -1; return; }
+            if (!source.isPlaying || level < 0) Switch(index);
+            else pendingLevel = index;
+        }
+
+        private void Switch(int index)
+        {
             level = index;
             if (themes[index] == null) themes[index] = Compose(index);
             source.clip = themes[index];
             source.Play();
+        }
+
+        private void Update()
+        {
+            float step = Time.unscaledDeltaTime / FadeTime;
+            if (pendingLevel >= 0)
+            {
+                fade -= step;
+                if (fade <= 0) { fade = 0; Switch(pendingLevel); pendingLevel = -1; }
+            }
+            else fade = Mathf.Min(1, fade + step);
+            source.volume = BaseVolume * fade;
         }
 
         public void ToggleMute() { source.mute = !source.mute; }

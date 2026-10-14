@@ -12,6 +12,7 @@ namespace FlappyBird
         private Texture2D cloudTexture;
         private Sprite cloudSprite;
         private float animationTime;
+        private bool leaving;
 
         public void Initialize(FlappyBirdGame owner, Sprite square)
         {
@@ -77,8 +78,19 @@ namespace FlappyBird
             return piece;
         }
 
+        // Start off-screen left; the normal follow eases it in.
+        public void EnterFromLeft()
+        {
+            leaving = false;
+            transform.position = new Vector3(-game.HalfWidth - 2.5f, game.Bird.transform.position.y, 0);
+        }
+
+        // Drift away to the left (the game hides it once it is gone).
+        public void Leave() { leaving = true; }
+
         public void ResetStorm()
         {
+            leaving = false;
             animationTime = 0;
             transform.position = game.Bird.transform.position + Vector3.left * SafeDistance;
             lightning.SetActive(false);
@@ -87,14 +99,20 @@ namespace FlappyBird
 
         private void LateUpdate()
         {
-            if (game == null || game.State != FlappyBirdGame.PlayState.Playing) return;
+            if (game == null || !game.WorldMoving) return;
+            animationTime += Time.deltaTime;
+            if (leaving)
+            {
+                transform.position += Vector3.left * 3 * Time.deltaTime;
+                AnimateRain();
+                return;
+            }
             Vector3 bird = game.Bird.transform.position;
             Vector3 target = bird + Vector3.left * SafeDistance;
             Vector3 position = Vector3.Lerp(transform.position, target, 1 - Mathf.Exp(-3 * Time.deltaTime));
             // Clamp every frame: even rapid movement cannot close the safety gap.
             position.x = Mathf.Min(position.x, bird.x - SafeDistance);
             transform.position = position;
-            animationTime += Time.deltaTime;
             AnimateRain();
             float flash = Mathf.Repeat(animationTime, 3.6f);
             lightning.SetActive(flash > 3.1f && flash < 3.24f || flash > 3.32f && flash < 3.4f);

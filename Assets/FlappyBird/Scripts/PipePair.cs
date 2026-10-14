@@ -10,8 +10,8 @@ namespace FlappyBird
 
         private void Update()
         {
-            if (game.State != FlappyBirdGame.PlayState.Playing) return;
-            transform.position += Vector3.left * game.pipeSpeed * Time.deltaTime;
+            if (!game.WorldMoving) return;
+            transform.position += Vector3.left * game.CurrentSpeed * Time.deltaTime;
             if (!scored && transform.position.x + (game.pipeWidth + 0.14f) * 0.5f < game.Bird.transform.position.x)
             {
                 scored = true;

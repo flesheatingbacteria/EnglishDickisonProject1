@@ -6,7 +6,10 @@ Open `Assets/Scenes/SampleScene.unity` and press **Play**. The game creates its 
 - **Space, left click, or touch:** jump from the nest and flap.
 - After a collision, the visible game freezes for one second. Then press Space, click, or tap to jump from the collision position and continue with the same pipes and score. The bird can pass through the obstacle during recovery until it is clear, preventing an immediate repeat collision.
 - Passing a whole pipe pair awards one point. Best score persists locally.
-- A dark storm cloud follows behind the bird with animated rain and occasional lightning. It keeps a safe distance, cannot damage the bird, and resets with the nest.
+- A dark storm cloud follows behind the bird in The Gale, with rain and occasional lightning. It keeps a safe distance and cannot damage the bird.
+- **Hope:** drains every second (`energyDrain`, more each level) and by `crashCost` per crash. Hearts (`HopeHeart`) appear with every `heartEvery`th pipe, hugging a cap or off the line between gaps, and restore `heartValue`. At zero the bird falls and the level restarts.
+- **Pipes** are procedural: each gap is placed relative to the last, and speed, gap size and the jumps between gaps all grow through each level.
+- **Cutscenes** (`StanzaRibbon`): the stanza streams in as a wave of words the bird flies through; caught words gather into the stanza at the top. Space skips. Meanwhile leftover pipes fade, the backdrop, ground, sky, particles and music cross-fade, and `WeatherFx` rolls the next world's weather in (storm clouds and rain for the Gale, snow for Extremity).
 
 ## Customize
 
