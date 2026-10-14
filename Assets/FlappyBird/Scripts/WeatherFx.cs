@@ -12,6 +12,7 @@ namespace FlappyBird
         private static readonly Vector3[] LevelWeather = { new Vector3(0, 0, 0), new Vector3(1, 0, 1), new Vector3(0, 1, 0) };
 
         private FlappyBirdGame game;
+        private Camera view;
         private Transform[] drops, flakes, clouds;
         private SpriteRenderer[] cloudArt;
         private Vector3 intensity;
@@ -62,7 +63,7 @@ namespace FlappyBird
 
         private void Update()
         {
-            Camera view = Camera.main;
+            if (view == null) view = Camera.main;
             if (view == null) return;
             right = view.orthographicSize * view.aspect + 1;
             left = -right;

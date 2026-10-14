@@ -15,4 +15,20 @@ v 1.4.1: **Hope never stops at all.** There is no game over: after a crash the g
 
 See [the framework guide](Assets/FlappyBird/README.md) for customization.
 
+## Versions
+
+The version is shown on the title screen and the poem page. Each is tagged in git (`v1.0.0` ... `v1.5.0`).
+
+| Version | What changed |
+|---|---|
+| 1.0.0 | Pixel art; one level per stanza (Hope, The Gale, Extremity) |
+| 1.1.0 | Pixel-art HUD, poem page and props |
+| 1.2.0 | Upgraded to Unity 6000.6.5f1 |
+| 1.3.0 | Hope bar and hearts, stanza cutscenes, weather, title screen |
+| 1.4.0 | The nest's tree matches each world |
+| 1.4.1 | Hope never stops: no game over, score is crashes; the Gale's storm surge |
+| 1.5.0 | Smooth transitions everywhere; the tree glides in at each level; Reset Level button; rougher pipes; faster UI |
+
+A separate experimental version, **beta-version**, lives in the fork [flesheatingbacteria/EnglishDickisonProject1](https://github.com/flesheatingbacteria/EnglishDickisonProject1). It builds levels from the poem's form: meter, dashes and rhymes.
+
 `Assets` (including `.meta` files), `Packages`, and `ProjectSettings` are versioned. Unity regenerates `Library`, `Temp`, and IDE project files locally.

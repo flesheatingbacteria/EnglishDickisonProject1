@@ -10,8 +10,8 @@ namespace FlappyBird
 
         private void Update()
         {
-            if (!game.WorldMoving) return;
-            transform.position += Vector3.left * game.CurrentSpeed * Time.deltaTime;
+            // Pipes ride the world's eased speed, so they slow, stop and start with everything else.
+            transform.position += Vector3.left * game.WorldSpeed * Time.deltaTime;
             if (!scored && transform.position.x + (game.pipeWidth + 0.14f) * 0.5f < game.Bird.transform.position.x)
             {
                 scored = true;

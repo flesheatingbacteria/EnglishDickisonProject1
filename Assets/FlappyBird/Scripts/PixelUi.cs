@@ -9,6 +9,9 @@ namespace FlappyBird
     public static class PixelUi
     {
         public const float Px = 3f;
+
+        // OnGUI runs several times a frame (layout, input, repaint); only repaint needs pixels.
+        private static bool Painting => Event.current == null || Event.current.type == EventType.Repaint;
         public static readonly Color Outline = new Color(0.08f, 0.06f, 0.1f);
 
         private const string Chars = " !\"'(),-./0123456789:;?ABCDEFGHIJKLMNOPQRSTUVWXYZ|";
@@ -37,6 +40,7 @@ namespace FlappyBird
         // align: 0 = left, 0.5 = centre, 1 = right. y is the top of the text.
         public static void Text(string text, float x, float y, float size, Color color, float align = 0, bool outline = true)
         {
+            if (!Painting || string.IsNullOrEmpty(text)) return;
             BuildAtlas();
             x = Mathf.Round(x - TextWidth(text, size) * align);
             y = Mathf.Round(y);
@@ -65,6 +69,7 @@ namespace FlappyBird
 
         public static void Fill(Rect rect, Color color)
         {
+            if (!Painting) return;
             if (white == null)
             {
                 white = new Texture2D(1, 1) { filterMode = FilterMode.Point };
@@ -80,6 +85,7 @@ namespace FlappyBird
         // Draws a ui/<name> texture as a 9-slice with the given border (in art pixels).
         public static void Frame(Rect rect, string name, int border = 3)
         {
+            if (!Painting) return;
             Texture2D texture = Ui(name);
             if (texture == null) { Fill(rect, new Color(0.14f, 0.13f, 0.23f, 0.92f)); return; }
             float b = border * Px, u = border / (float)texture.width, v = border / (float)texture.height;
@@ -95,6 +101,7 @@ namespace FlappyBird
 
         public static void Icon(string name, float x, float y, float scale = Px)
         {
+            if (!Painting) return;
             Texture2D texture = Ui(name);
             if (texture != null) GUI.DrawTexture(new Rect(Mathf.Round(x), Mathf.Round(y), texture.width * scale, texture.height * scale), texture);
         }
