@@ -11,7 +11,7 @@ A Unity 6 Flappy Bird game framework.
 
 Three levels follow the three stanzas of "Hope" is the thing with feathers: **Hope**, **The Gale** and **Extremity**, 15 pipes each. Between levels (and at the start) a cutscene flies the bird through the next stanza while the world and its weather blend into the next one.
 
-Your **hope** bar drains as you fly and each crash costs some. Grab the hearts, which sit a little out of the way, to refill it. If it runs out, the bird falls and the level restarts. After a crash with hope left, the game freezes for one second; flap again to carry on.
+**Hope never stops – at all.** There is no game over: after a crash the game freezes for a second, then you flap and carry on. The score is simply how many times you crashed, and your record is the **fewest crashes** in a full run. Your **hope** bar drains as you fly and each crash costs some; grab hearts (placed a little out of the way) to refill it. With no hope left the bird still flies, just with weaker wingbeats. At the end of the Gale the storm surges ("And sore must be the storm"): heavier rain, lightning, gusts that shove the bird and faster pipes, until it breaks as you leave.
 
 See [the framework guide](Assets/FlappyBird/README.md) for customization.
 

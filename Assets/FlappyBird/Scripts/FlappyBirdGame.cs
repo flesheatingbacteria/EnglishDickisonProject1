@@ -9,9 +9,10 @@ namespace FlappyBird
 {
     public sealed class FlappyBirdGame : MonoBehaviour
     {
-        // GameOver: a crash (freeze, then flap to carry on). Fallen: out of hope, the level restarts.
-        // Interlude: the stanza cutscene that opens the game and links one level to the next.
-        public enum PlayState { Ready, Playing, GameOver, AwaitingFlap, Complete, Fallen, Interlude }
+        // "And never stops - at all -": there is no game over. GameOver is a crash: the bird
+        // freezes, then flaps on. Interlude is the stanza cutscene that opens the game and
+        // links one level to the next.
+        public enum PlayState { Ready, Playing, GameOver, AwaitingFlap, Complete, Interlude }
         [Header("Bird")]
         [Min(0.1f)] public float gravityScale = 2.2f;
         [Min(0.1f)] public float flapSpeed = 6.5f;
@@ -33,11 +34,16 @@ namespace FlappyBird
         public BirdController Bird { get; private set; }
         public float HalfWidth { get; private set; }
         public int Score { get; private set; }
-        public int BestScore { get; private set; }
+        // The score is how many times you crashed; the record is the fewest crashes in a full run.
+        public int Crashes { get; private set; }
+        public int FewestCrashes { get; private set; } = -1;
         public float Energy { get; private set; } = 100;
         // Pipes speed up within each level and from one level to the next.
         public bool WorldMoving => State == PlayState.Playing || State == PlayState.Interlude;
-        public float CurrentSpeed => pipeSpeed * (1 + 0.12f * LevelIndex + 0.1f * LevelProgress);
+        public float CurrentSpeed => pipeSpeed * (1 + 0.12f * LevelIndex + 0.1f * LevelProgress + 0.15f * StormSurge);
+        // "And sore must be the storm": over the Gale's last stretch the storm throws everything it has.
+        public float StormSurge => LevelIndex == 1 && (State == PlayState.Playing || State == PlayState.GameOver || State == PlayState.AwaitingFlap)
+            ? Mathf.Clamp01((LevelProgress - 0.6f) / 0.3f) : 0;
         private float LevelProgress => (float)(Score % ObstaclesPerLevel) / ObstaclesPerLevel;
 
         private bool showingPoem;
@@ -58,7 +64,7 @@ namespace FlappyBird
             + "Yet, never, in extremity,\n"
             + "It asked a crumb of me.";
 
-        private const string BestKey = "FlappyBird.BestScore";
+        private const string BestKey = "FlappyBird.FewestCrashes";
         public int LevelIndex { get; private set; }
         public const int ObstaclesPerLevel = 15;
         // One level per stanza, in the poem's order.
@@ -107,9 +113,12 @@ namespace FlappyBird
         private SpriteRenderer treeCrown;
         private SpriteRenderer[] nestArt = new SpriteRenderer[0];
         private Sprite featherArt;
-        private float nestFadeAt = -10, shakeUntil = -10, crashAt = -10, fallAt = -10, resetFadeAt = -10, fallSpeed;
+        private float nestFadeAt = -10, shakeUntil = -10, crashAt = -10;
         private int lostHope;
-        private bool resetDone = true, showingTitle = true;
+        private bool showingTitle = true, newRecord;
+        // The Gale's storm surge: gusts, lightning and the "sore" storm line.
+        private float nextGustAt, gustAt = -10, nextBoltAt, boltAt = -10, surgeStart = -10;
+        private int gustDirection;
         private Rect playButton, titlePoemButton;
         private float CrossfadeBlend => Mathf.SmoothStep(0, 1, Mathf.Clamp01((Time.time - crossfadeStart) / CrossfadeTime));
         private Transform pipes;
@@ -127,8 +136,8 @@ namespace FlappyBird
         };
         private static readonly Color UiMuted = new Color(0.86f, 0.82f, 0.9f);
         private Rect poemButton, playAgainButton;
-        private float bannerStart = -10, scorePopAt = -10;
-        private int shownScore;
+        private float bannerStart = -10, crashPopAt = -10;
+        private int shownCrashes;
         private float Floor => -cameraHalfHeight + 0.7f;
 
         // Open SampleScene and press Play. Other scenes can opt in with this component.
@@ -211,7 +220,7 @@ namespace FlappyBird
             gameObject.AddComponent<BirdThoughtNotes>().Initialize(Bird.transform, music, square);
             weather = gameObject.AddComponent<WeatherFx>();
             weather.Initialize(this, square, Floor);
-            BestScore = PlayerPrefs.GetInt(BestKey, 0);
+            FewestCrashes = PlayerPrefs.GetInt(BestKey, -1);
             ApplyLevel();
             ResetRun();
             showingTitle = true;
@@ -350,22 +359,9 @@ namespace FlappyBird
             }
             if (State == PlayState.Complete) return;
             if (State == PlayState.Interlude) { UpdateInterlude(); return; }
-            if (!resetDone && Time.unscaledTime - resetFadeAt >= 0.35f)
-            {
-                // The screen is fully dark: restart the level behind it, then fade back in.
-                resetDone = true;
-                ResetRun();
-            }
-            if (State == PlayState.Fallen)
-            {
-                TumbleBird();
-                if (resetDone && Time.unscaledTime >= resumeAt && FlapPressed() && !PointerOverControls())
-                {
-                    resetFadeAt = Time.unscaledTime;
-                    resetDone = false;
-                }
-                return;
-            }
+            float surge = StormSurge;
+            weather.Surge(surge);
+            storm.Surge(surge);
             if (State == PlayState.GameOver)
             {
                 if (Time.unscaledTime >= resumeAt) State = PlayState.AwaitingFlap;
@@ -380,11 +376,12 @@ namespace FlappyBird
                     State = PlayState.Playing;
                 }
                 if (State == PlayState.Ready) State = PlayState.Playing;
-                Bird.Flap();
+                // Out of hope the bird still flies - it never stops - but its wingbeats are weaker.
+                Bird.Flap(Energy > 0 ? 1 : 0.8f);
             }
             if (State != PlayState.Playing) return;
-            Energy -= (energyDrain + 1.5f * LevelIndex) * Time.deltaTime;
-            if (Energy <= 0) { Fall(); return; }
+            Energy = Mathf.Max(0, Energy - (energyDrain + 1.5f * LevelIndex) * Time.deltaTime);
+            if (surge > 0) StormTurns(surge);
             ScrollWorld(CurrentSpeed);
             spawnTimer -= Time.deltaTime;
             if (spawnTimer <= 0)
@@ -393,6 +390,30 @@ namespace FlappyBird
                 spawnTimer = Interval;
             }
             if (!Bird.Recovering && (Bird.transform.position.y < Floor || Bird.transform.position.y > cameraHalfHeight)) EndRun();
+        }
+
+        private void StormTurns(float surge)
+        {
+            float now = Time.unscaledTime;
+            if (surgeStart < 0) surgeStart = now;
+            // Gusts shove the bird up or down.
+            if (now >= nextGustAt)
+            {
+                if (gustAt > 0)
+                {
+                    gustDirection = Random.value < 0.55f ? -1 : 1;
+                    Bird.Push(new Vector2(0, gustDirection * Random.Range(1.8f, 3f) * surge));
+                    shakeUntil = Mathf.Max(shakeUntil, now + 0.12f);
+                }
+                gustAt = now;
+                nextGustAt = now + Random.Range(1.8f, 3.2f);
+            }
+            // Lightning, more often as the surge builds.
+            if (surge > 0.3f && now >= nextBoltAt)
+            {
+                if (nextBoltAt > 0) { boltAt = now; shakeUntil = Mathf.Max(shakeUntil, now + 0.1f); }
+                nextBoltAt = now + Random.Range(1.2f, 2.6f) / surge;
+            }
         }
 
         private void ScrollWorld(float speed)
@@ -632,6 +653,7 @@ namespace FlappyBird
             if (LevelIndex < 2)
             {
                 Energy = 100; // Reaching a new stanza refills hope.
+                surgeStart = -10;
                 StartInterlude(LevelIndex + 1);
             }
             else
@@ -719,7 +741,7 @@ namespace FlappyBird
         private void AnimateBird()
         {
             if (birdArt == null) return;
-            if (State == PlayState.GameOver || State == PlayState.AwaitingFlap || State == PlayState.Fallen)
+            if (State == PlayState.GameOver || State == PlayState.AwaitingFlap)
                 birdArt.sprite = birdHurt != null ? birdHurt : birdFrames[1];
             else if (State == PlayState.Playing || State == PlayState.Interlude)
             {
@@ -760,45 +782,15 @@ namespace FlappyBird
         {
             if (State != PlayState.Playing) return;
             Bird.Stop();
-            SaveBest();
+            Crashes++;
             resumeAt = Time.unscaledTime + 1f;
-            // A crash shakes the screen, knocks feathers loose and costs hope.
+            // A crash shakes the screen, knocks feathers loose and costs hope - but never ends the run.
             crashAt = Time.unscaledTime;
             shakeUntil = Time.unscaledTime + 0.3f;
             lostHope = Mathf.RoundToInt(Mathf.Min(Energy, crashCost));
             FeatherPuff.Burst(Bird.transform.position, 8, featherArt, square);
             Energy = Mathf.Max(0, Energy - crashCost);
-            if (Energy <= 0) Fall();
-            else State = PlayState.GameOver;
-        }
-
-        // Out of hope: the bird tumbles to the ground and the level restarts.
-        private void Fall()
-        {
-            Energy = 0;
-            Bird.Stop();
-            SaveBest();
-            fallAt = Time.unscaledTime;
-            fallSpeed = 3;
-            resumeAt = Time.unscaledTime + 1.4f;
-            FeatherPuff.Burst(Bird.transform.position, 14, featherArt, square);
-            State = PlayState.Fallen;
-        }
-
-        private void TumbleBird()
-        {
-            Transform bird = Bird.transform;
-            float rest = Floor + 0.18f;
-            if (bird.position.y <= rest) return;
-            fallSpeed -= 18 * Time.deltaTime;
-            float y = Mathf.Max(rest, bird.position.y + fallSpeed * Time.deltaTime);
-            bird.SetPositionAndRotation(new Vector3(bird.position.x, y, 0), bird.rotation * Quaternion.Euler(0, 0, -600 * Time.deltaTime));
-            if (y <= rest)
-            {
-                bird.rotation = Quaternion.Euler(0, 0, 160); // landed upside down
-                shakeUntil = Time.unscaledTime + 0.15f;
-                FeatherPuff.Burst(bird.position, 5, featherArt, square);
-            }
+            State = PlayState.GameOver;
         }
 
         private void LateUpdate()
@@ -815,14 +807,14 @@ namespace FlappyBird
             StartInterlude(LevelIndex);
         }
 
+        // A full run is over: keep it if it had the fewest crashes yet.
         private void SaveBest()
         {
-            if (Score > BestScore)
-            {
-                BestScore = Score;
-                PlayerPrefs.SetInt(BestKey, BestScore);
-                PlayerPrefs.Save();
-            }
+            newRecord = FewestCrashes < 0 || Crashes < FewestCrashes;
+            if (!newRecord) return;
+            FewestCrashes = Crashes;
+            PlayerPrefs.SetInt(BestKey, FewestCrashes);
+            PlayerPrefs.Save();
         }
 
         public void ResetRun()
@@ -830,6 +822,7 @@ namespace FlappyBird
             State = PlayState.Ready;
             ClearPipes();
             Score = LevelIndex * ObstaclesPerLevel;
+            Crashes = 0;
             Energy = 100;
             pipesSpawned = 0;
             spawnTimer = 0.8f;
@@ -863,10 +856,6 @@ namespace FlappyBird
             if (showingPoem) DrawPoem(width);
             else if (showingTitle) DrawTitle(width);
             else DrawHud(width);
-            // Restarting after a fall fades through dark.
-            float sinceReset = Time.unscaledTime - resetFadeAt;
-            float dark = sinceReset < 0.35f ? sinceReset / 0.35f : 1 - (sinceReset - 0.35f) / 0.5f;
-            if (dark > 0) PixelUi.Fill(new Rect(0, 0, width, UiHeight), new Color(0.04f, 0.03f, 0.08f, Mathf.Clamp01(dark)));
             PixelUi.Frame(new Rect(0, 0, width, UiHeight), "screen_frame", 4);
             GUI.color = previousColor;
             GUI.matrix = previousMatrix;
@@ -879,14 +868,28 @@ namespace FlappyBird
             Rect fullScreen = new Rect(0, 0, width, UiHeight);
             float sinceCrash = now - crashAt;
             if (sinceCrash < 0.15f) PixelUi.Fill(fullScreen, new Color(1, 1, 1, 0.35f * (1 - sinceCrash / 0.15f)));
-            if (State == PlayState.Fallen)
-                PixelUi.Fill(fullScreen, new Color(0.05f, 0.03f, 0.1f, 0.45f * Mathf.Clamp01((now - fallAt) / 0.8f)));
+            float sinceBolt = now - boltAt;
+            if (sinceBolt < 0.1f || sinceBolt > 0.16f && sinceBolt < 0.22f) PixelUi.Fill(fullScreen, new Color(1, 1, 1, 0.4f));
+            float sinceGust = now - gustAt;
+            if (StormSurge > 0 && sinceGust < 0.5f)
+            {
+                // Wind streaks show which way the gust is shoving.
+                for (int i = 0; i < 9; i++)
+                {
+                    float y = 120 + i * 67 + gustDirection * sinceGust * 160;
+                    float x = width - Mathf.Repeat(i * 173 + sinceGust * 2400, width + 200);
+                    PixelUi.Fill(new Rect(Mathf.Round(x), Mathf.Round(y), 120, 3), new Color(1, 1, 1, 0.5f * (1 - sinceGust / 0.5f)));
+                }
+            }
             if (State == PlayState.Interlude)
             {
                 Rect screen = fullScreen;
                 // The opening starts at night and brightens like a sunrise.
                 if (interludeFrom == interludeLevel)
                     PixelUi.Fill(screen, new Color(0.08f, 0.06f, 0.18f, 0.55f * (1 - Mathf.SmoothStep(0, 1, (Time.time - interludeStart - 0.3f) / 3.5f))));
+                // The Gale's storm breaks as you leave it.
+                if (interludeFrom == 1 && interludeLevel == 2 && Time.time - interludeStart < 0.3f)
+                    PixelUi.Fill(screen, new Color(1, 1, 1, 0.6f * (1 - (Time.time - interludeStart) / 0.3f)));
                 // Lightning announces the Gale.
                 float sinceSwap = Time.time - crossfadeStart;
                 if (interludeLevel == 1 && interludeFrom != 1 && (sinceSwap > 3.2f && sinceSwap < 3.28f || sinceSwap > 3.42f && sinceSwap < 3.52f))
@@ -905,11 +908,12 @@ namespace FlappyBird
             PixelUi.Fill(track, new Color(0.16f, 0.15f, 0.25f));
             PixelUi.Fill(new Rect(track.x, track.y, Mathf.Round(track.width * progress / ObstaclesPerLevel / 3) * 3, track.height), accent);
 
-            // Score pops one size up for a moment when it changes.
-            if (Score != shownScore) { if (Score > shownScore) scorePopAt = now; shownScore = Score; }
-            float scoreSize = now - scorePopAt < 0.12f ? 9 : 8;
-            PixelUi.Text(Score.ToString(), width / 2, UiMargin + (9 - scoreSize) * 2.5f, scoreSize, Color.white, 0.5f);
-            PixelUi.Text("BEST " + BestScore, width / 2, UiMargin + 56, 2, UiMuted, 0.5f);
+            // The scoreboard is just your crashes; it pops (and flushes red) when one happens.
+            if (Crashes != shownCrashes) { if (Crashes > shownCrashes) crashPopAt = now; shownCrashes = Crashes; }
+            bool popping = now - crashPopAt < 0.2f;
+            float crashSize = popping ? 9 : 8;
+            PixelUi.Text(Crashes.ToString(), width / 2, UiMargin + (9 - crashSize) * 2.5f, crashSize, popping ? new Color(1f, 0.45f, 0.4f) : Color.white, 0.5f);
+            PixelUi.Text(FewestCrashes >= 0 ? $"CRASHES - FEWEST {FewestCrashes}" : "CRASHES", width / 2, UiMargin + 56, 2, UiMuted, 0.5f);
 
             // Hope bar: drains while flying, refills from hearts, blinks red when low.
             Rect bar = new Rect(width - UiMargin - 168, UiMargin + 6, 168, 30);
@@ -929,7 +933,7 @@ namespace FlappyBird
             float shine = trough.x + Mathf.Round(Mathf.Repeat(now * 90, trough.width + 90) / 3) * 3 - 45;
             Rect glint = Rect.MinMaxRect(Mathf.Max(fill.x, shine), fill.y, Mathf.Min(fill.xMax, shine + 6), fill.yMax);
             if (glint.width > 0 && !low) PixelUi.Fill(glint, new Color(1, 1, 1, 0.55f));
-            PixelUi.Text("HOPE", bar.xMax, bar.yMax + 9, 2, low ? new Color(1f, 0.5f, 0.42f) : UiMuted, 1);
+            PixelUi.Text(Energy > 0 ? "HOPE" : "HOPE IS QUIET - FIND A HEART", bar.xMax, bar.yMax + 9, 2, low ? new Color(1f, 0.5f, 0.42f) : UiMuted, 1);
             if (sinceCrash < 0.9f && lostHope > 0)
                 PixelUi.Text("-" + lostHope, bar.x + fill.width, bar.yMax + 9 + Mathf.Round(sinceCrash * 30 / 3) * 3, 3,
                     new Color(1f, 0.4f, 0.35f, 1 - sinceCrash / 0.9f), 0.5f);
@@ -954,19 +958,18 @@ namespace FlappyBird
                 PixelUi.Text(line, width / 2, panel.y + 90, 2, Color.white, 0.5f);
                 GUI.color = Color.white;
             }
+            float sinceSurge = now - surgeStart;
+            if (LevelIndex == 1 && surgeStart > 0 && sinceSurge < 3f)
+            {
+                GUI.color = new Color(1, 1, 1, Mathf.Clamp01((3f - sinceSurge) / 0.6f));
+                PixelUi.Text("AND SORE MUST BE THE STORM -", width / 2, 150 + Mathf.Round(Mathf.Clamp01(1 - sinceSurge / 0.3f) * 6) * 3, 3,
+                    new Color(1f, 0.55f, 0.45f), 0.5f);
+                GUI.color = Color.white;
+            }
             if (State == PlayState.Ready)
             {
                 PixelUi.Text("SPACE OR CLICK TO FLY", width / 2, 520 + bob, 3, Color.white, 0.5f);
                 PixelUi.Text("GRAB HEARTS TO KEEP YOUR HOPE UP", width / 2, 556, 2, UiMuted, 0.5f);
-            }
-            else if (State == PlayState.Fallen && now >= resumeAt - 0.2f)
-            {
-                Rect panel = new Rect(0, 290, 408, 96);
-                panel.x = Mathf.Round((width - panel.width) / 2);
-                PixelUi.Frame(panel, "panel");
-                PixelUi.Text("HOPE FELL QUIET", width / 2, panel.y + 24, 3, new Color(1f, 0.5f, 0.42f), 0.5f);
-                if (now >= resumeAt && Mathf.Repeat(now, 1) < 0.7f)
-                    PixelUi.Text("SPACE OR CLICK TO TRY THE LEVEL AGAIN", width / 2, panel.y + 60, 2, UiMuted, 0.5f);
             }
             else if (State == PlayState.GameOver || State == PlayState.AwaitingFlap)
             {
@@ -979,13 +982,15 @@ namespace FlappyBird
             }
             else if (State == PlayState.Complete)
             {
-                Rect panel = new Rect(0, 250, 420, 196);
+                Rect panel = new Rect(0, 250, 420, 202);
                 panel.x = Mathf.Round((width - panel.width) / 2);
                 PixelUi.Frame(panel, "panel");
                 PixelUi.Text("YOU CARRIED HOPE", width / 2, panel.y + 26, 4, accent, 0.5f);
                 PixelUi.Text("THROUGH ALL THREE WORLDS", width / 2, panel.y + 58, 3, Color.white, 0.5f);
-                PixelUi.Text($"SCORE {Score}   BEST {BestScore}", width / 2, panel.y + 88, 2, UiMuted, 0.5f);
-                playAgainButton = new Rect(width / 2 - 96, panel.y + 120, 192, 48);
+                PixelUi.Text($"CRASHES {Crashes}", width / 2, panel.y + 86, 3, Color.white, 0.5f);
+                PixelUi.Text(newRecord ? "NEW RECORD - FEWEST YET" : $"FEWEST {FewestCrashes}", width / 2, panel.y + 108,
+                    2, newRecord ? accent : UiMuted, 0.5f);
+                playAgainButton = new Rect(width / 2 - 96, panel.y + 134, 192, 48);
                 if (Button(playAgainButton, "PLAY AGAIN", 3)) SelectLevel(0);
             }
 
@@ -1027,7 +1032,7 @@ namespace FlappyBird
             if (Button(playButton, "PLAY", 4)) StartGame();
             titlePoemButton = new Rect(playButton.xMax + 12, 574, 120, 54);
             if (Button(titlePoemButton, "POEM", 3)) SetPoemVisible(true);
-            string hint = BestScore > 0 ? "BEST " + BestScore + "  -  OR PRESS SPACE" : "OR PRESS SPACE";
+            string hint = FewestCrashes >= 0 ? $"FEWEST CRASHES {FewestCrashes}  -  OR PRESS SPACE" : "OR PRESS SPACE";
             if (Mathf.Repeat(now, 1.2f) < 0.8f) PixelUi.Text(hint, width / 2, 646, 2, Color.white, 0.5f);
 
             const string poemCredit = "POEM BY EMILY DICKINSON";

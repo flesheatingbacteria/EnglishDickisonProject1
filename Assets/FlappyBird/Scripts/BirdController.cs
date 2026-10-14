@@ -34,10 +34,17 @@ namespace FlappyBird
             transform.SetPositionAndRotation(new Vector3(-1.5f, 0, 0), Quaternion.identity);
         }
 
-        public void Flap()
+        // strength below 1 makes a weaker flap (used when the bird is out of hope).
+        public void Flap(float strength = 1)
         {
             body.simulated = true;
-            body.linearVelocity = new Vector2(0, flapSpeed);
+            body.linearVelocity = new Vector2(0, flapSpeed * strength);
+        }
+
+        // A sudden shove, such as a gust of wind.
+        public void Push(Vector2 change)
+        {
+            if (body.simulated) body.linearVelocity += change;
         }
 
         public void Stop() { body.simulated = false; }

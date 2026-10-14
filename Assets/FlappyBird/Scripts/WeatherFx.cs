@@ -7,7 +7,7 @@ namespace FlappyBird
     // Decorative only: nothing here has a collider.
     public sealed class WeatherFx : MonoBehaviour
     {
-        private const int Drops = 70, Flakes = 60, Clouds = 6;
+        private const int Drops = 110, CalmDrops = 70, Flakes = 60, Clouds = 6;
         // Per level: rain, snow, clouds.
         private static readonly Vector3[] LevelWeather = { new Vector3(0, 0, 0), new Vector3(1, 0, 1), new Vector3(0, 1, 0) };
 
@@ -15,6 +15,8 @@ namespace FlappyBird
         private Transform[] drops, flakes, clouds;
         private SpriteRenderer[] cloudArt;
         private Vector3 intensity;
+        // 0..1: the Gale's storm surge. Heavier, faster rain and darker clouds.
+        private float surge, rainPhase, snowPhase, cloudPhase;
         private float left, right, top, floor;
 
         public void Initialize(FlappyBirdGame owner, Sprite square, float floorY)
@@ -53,6 +55,8 @@ namespace FlappyBird
 
         public void Set(int level) => intensity = LevelWeather[level];
 
+        public void Surge(float amount) => surge = amount;
+
         // Part-way between two levels' weather, for the cutscene between them.
         public void Blend(int from, int to, float amount) => intensity = Vector3.Lerp(LevelWeather[from], LevelWeather[to], amount);
 
@@ -65,25 +69,29 @@ namespace FlappyBird
             top = view.orthographicSize + 0.5f;
             float time = Time.time, span = right - left, height = top - floor;
             float drift = game.WorldMoving ? 1 : 0.3f;
+            // Phases build up gradually, so speeding the weather up never makes it jump.
+            rainPhase += Time.deltaTime * (1 + surge);
+            snowPhase += Time.deltaTime;
+            cloudPhase += Time.deltaTime * drift * (1 + surge);
 
             for (int i = 0; i < Drops; i++)
             {
-                float fall = Mathf.Repeat(time * 1.1f + i * 0.618f, 1);
-                float x = left + Mathf.Repeat(i * 0.37f * span - time * 2.5f * drift - fall * 2, span);
-                Place(drops[i], x, top - fall * height, intensity.x);
+                float fall = Mathf.Repeat(rainPhase * 1.1f + i * 0.618f, 1);
+                float x = left + Mathf.Repeat(i * 0.37f * span - rainPhase * 2.5f * drift - fall * (2 + 2 * surge), span);
+                Place(drops[i], x, top - fall * height, i < CalmDrops + surge * (Drops - CalmDrops) ? intensity.x : 0);
             }
             for (int i = 0; i < Flakes; i++)
             {
-                float fall = Mathf.Repeat(time * 0.18f + i * 0.618f, 1);
-                float x = left + Mathf.Repeat(i * 0.53f * span - time * 0.8f * drift + Mathf.Sin(time * 1.3f + i) * 0.3f, span);
+                float fall = Mathf.Repeat(snowPhase * 0.18f + i * 0.618f, 1);
+                float x = left + Mathf.Repeat(i * 0.53f * span - snowPhase * 0.8f * drift + Mathf.Sin(time * 1.3f + i) * 0.3f, span);
                 Place(flakes[i], x, top - fall * height, intensity.y);
             }
+            float shade = 1 - 0.35f * surge;
             for (int i = 0; i < Clouds; i++)
             {
-                float x = left + Mathf.Repeat(i * span / Clouds - time * 0.7f * drift, span);
-                Place(clouds[i], x, top - 1.1f - (i % 3) * 0.35f, intensity.z);
-                Color c = cloudArt[i].color;
-                cloudArt[i].color = new Color(c.r, c.g, c.b, Mathf.Clamp01(intensity.z * 1.5f) * 0.95f);
+                float x = left + Mathf.Repeat(i * span / Clouds - cloudPhase * 0.7f, span);
+                Place(clouds[i], x, top - 1.1f - (i % 3) * 0.35f - surge * 0.4f, intensity.z);
+                cloudArt[i].color = new Color(0.75f * shade, 0.78f * shade, 0.88f * shade, Mathf.Clamp01(intensity.z * 1.5f) * 0.95f);
             }
         }
 

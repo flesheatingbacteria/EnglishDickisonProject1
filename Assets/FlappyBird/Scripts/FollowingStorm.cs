@@ -13,6 +13,7 @@ namespace FlappyBird
         private Sprite cloudSprite;
         private float animationTime;
         private bool leaving;
+        private float surge;
 
         public void Initialize(FlappyBirdGame owner, Sprite square)
         {
@@ -85,6 +86,14 @@ namespace FlappyBird
             transform.position = new Vector3(-game.HalfWidth - 2.5f, game.Bird.transform.position.y, 0);
         }
 
+        // 0..1: the Gale's storm surge. The cloud swells, hangs back a little further
+        // (it is bigger, not closer) and flashes lightning more often.
+        public void Surge(float amount)
+        {
+            surge = amount;
+            transform.localScale = Vector3.one * (1 + 1.2f * amount);
+        }
+
         // Drift away to the left (the game hides it once it is gone).
         public void Leave() { leaving = true; }
 
@@ -108,14 +117,16 @@ namespace FlappyBird
                 return;
             }
             Vector3 bird = game.Bird.transform.position;
-            Vector3 target = bird + Vector3.left * SafeDistance;
+            float distance = SafeDistance + 0.9f * surge;
+            Vector3 target = bird + Vector3.left * distance;
             Vector3 position = Vector3.Lerp(transform.position, target, 1 - Mathf.Exp(-3 * Time.deltaTime));
             // Clamp every frame: even rapid movement cannot close the safety gap.
-            position.x = Mathf.Min(position.x, bird.x - SafeDistance);
+            position.x = Mathf.Min(position.x, bird.x - distance);
             transform.position = position;
             AnimateRain();
-            float flash = Mathf.Repeat(animationTime, 3.6f);
-            lightning.SetActive(flash > 3.1f && flash < 3.24f || flash > 3.32f && flash < 3.4f);
+            float period = Mathf.Lerp(3.6f, 1.4f, surge);
+            float flash = Mathf.Repeat(animationTime, period) - (period - 0.5f);
+            lightning.SetActive(flash > 0 && flash < 0.14f || flash > 0.22f && flash < 0.3f);
         }
 
         private void AnimateRain()
