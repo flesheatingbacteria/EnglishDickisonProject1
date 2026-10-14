@@ -1,6 +1,8 @@
 # English Dickinson Project
 
-A Unity 6 Flappy Bird game framework.
+**The Thing With Feathers**, a Flappy Bird game built on Emily Dickinson's "Hope" is the thing with feathers, in Unity 6.
+
+**Play it in your browser:** https://flesheatingbacteria.github.io/EnglishDickisonProject1/ (Space, click or tap to flap; **M** mutes).
 
 ## Run
 
@@ -15,11 +17,17 @@ After the Gale's fifteenth pipe, a nine-second **Warmth** interlude brings out t
 
 v 1.4.1: **Hope never stops at all.** There is no game over: after a crash the game freezes for a second, then you flap and carry on. The score is simply how many times you crashed, and your record is the **fewest crashes** in a full run. Your **hope** bar drains as you fly and each crash costs some; grab hearts (placed a little out of the way) to refill it. With no hope left the bird still flies, just with weaker wingbeats. At the end of the Gale the storm surges ("And sore must be the storm"): heavier rain, lightning, gusts that shove the bird and faster pipes, until it breaks as you leave.
 
+v 1.6.0: **The boss.** After Extremity's last pipe the world stops, the music goes quiet, and Emily Dickinson is waiting. She talks in dashes and Capitals and attacks the way a certain skeleton does: walls of dashes, blue dashes that only sting a rising bird, giant quills that fire beams, falling capital letters, and "tell it Slant" gravity flips, with black cuts between attacks. She can't be hit back; you just have to keep flying until she tires. Hits count as crashes and cost hope, but the run never ends. When she falls asleep, fly to her. Sound effects (all synthesized in code) and a mute button (or **M**) are new too.
+
 See [the framework guide](Assets/FlappyBird/README.md) for customization.
+
+## Build for the web
+
+In Unity, **Flappy Bird > Build WebGL** writes the site to `Builds/WebGL` (gzip with a built-in decompressor, so any static host works, GitHub Pages included). To check it locally, serve that folder (for example `python3 -m http.server --directory Builds/WebGL`) and open the page; opening `index.html` as a file won't work.
 
 ## Versions
 
-The version is shown on the title screen and the poem page. Each is tagged in git (`v1.0.0` ... `v1.5.1`).
+The version is shown on the title screen and the poem page. Each is tagged in git (`v1.0.0` ... `v1.6.0`).
 
 | Version | What changed |
 |---|---|
@@ -31,7 +39,8 @@ The version is shown on the title screen and the poem page. Each is tagged in gi
 | 1.4.1 | Hope never stops: no game over, score is crashes; the Gale's storm surge |
 | 1.5.0 | Smooth transitions everywhere; the tree glides in at each level; Reset Level button; rougher pipes; faster UI |
 | 1.5.1 | Skipped cutscenes fade their words out; clearer reset icon |
+| 1.6.0 | Boss fight against Emily Dickinson; sound effects; mute; WebGL build, playable online |
 
-A separate experimental version, **beta-version**, lives in the fork [flesheatingbacteria/EnglishDickisonProject1](https://github.com/flesheatingbacteria/EnglishDickisonProject1). It builds levels from the poem's form: meter, dashes and rhymes.
+A separate experimental version, **beta-version**, lives in the fork [flesheatingbacteria/EnglishDickisonProject1](https://github.com/flesheatingbacteria/EnglishDickisonProject1) ([play it](https://flesheatingbacteria.github.io/EnglishDickisonProject1/beta/)). It builds levels from the poem's form: meter, dashes and rhymes, and ends with "The Quiet" instead of the boss.
 
 `Assets` (including `.meta` files), `Packages`, and `ProjectSettings` are versioned. Unity regenerates `Library`, `Temp`, and IDE project files locally.

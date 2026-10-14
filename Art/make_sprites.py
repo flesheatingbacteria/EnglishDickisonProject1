@@ -630,6 +630,132 @@ def heart():
     ], {"R": c("#e8403a"), "W": c("#ffd0c8"), "D": c("#a82828")}))
 
 
+def speaker(on):
+    """Sound on (waves) or off (a cross)."""
+    rows = [
+        "...#.....",
+        "..##..#..",
+        "####...#.",
+        "####.#.#.",
+        "####...#.",
+        "..##..#..",
+        "...#.....",
+    ] if on else [
+        "...#.....",
+        "..##.....",
+        "####.#.#.",
+        "####..#..",
+        "####.#.#.",
+        "..##.....",
+        "...#.....",
+    ]
+    return draw_map(rows, {"#": c("#3a1f0d")})
+
+
+def quill(open_nib):
+    """The boss's 'blaster': a giant quill pen, nib pointing left. Open, it fires ink-light."""
+    img = Image.new("RGBA", (30, 14), CLEAR)
+    q = img.load()
+    vane, shade, rib = c("#f4f0e6"), c("#c8c0b4"), c("#8a7a6a")
+    for x in range(9, 30):  # the feather: a long vane above the shaft, a narrow one below, curling up at the back
+        top = int(6 * math.sin(math.pi * (x - 8) / 23) ** 0.7)
+        bottom = int(2.5 * math.sin(math.pi * (x - 8) / 23))
+        lift = (x - 20) // 4 if x > 20 else 0
+        for y in range(7 - top - lift, 8 + bottom - lift):
+            if 0 <= y < 14:
+                q[x, y] = shade if y > 7 - lift else vane
+        if x % 4 == 1 and top > 2:  # notches in the vane
+            q[x, 7 - top - lift] = CLEAR
+    box(q, 6, 7, 30, 8, rib, 30, 14)  # the shaft
+    nib, ink = c("#d8b04a"), c("#3a2a1a")
+    if open_nib:
+        for x, y in ((0, 4), (1, 4), (2, 5), (3, 5), (4, 6), (5, 6), (0, 10), (1, 10), (2, 9), (3, 9), (4, 8), (5, 8)):
+            q[x, y] = nib
+        box(q, 6, 5, 9, 10, nib, 30, 14)
+        for x in range(0, 6):
+            q[x, 7] = c("#fff6c0")
+    else:
+        for x in range(0, 9):
+            half = max(0, (x - 1) // 3)
+            for y in range(7 - half, 8 + half):
+                q[x, y] = nib
+        q[0, 7] = ink; q[1, 7] = ink; q[5, 7] = ink
+    outline(img)
+    return img
+
+
+def dickinson(face):
+    """Emily Dickinson, white dress and all: face is 'idle', 'sleep' or 'smile'."""
+    w, h = 26, 48
+    img = Image.new("RGBA", (w, h), CLEAR)
+    q = img.load()
+    skin, skin_d = c("#f2d2b0"), c("#d8ae8a")
+    hair, hair_l = c("#3a2418"), c("#5a3a28")
+    dress, dress_d, lace = c("#ece6da"), c("#c8c0b4"), c("#ffffff")
+    drop = 1 if face == "sleep" else 0  # her head nods when she dozes off
+    # the dress: a fitted bodice, then a full skirt down to the hem
+    for y in range(18, h):
+        half = 5 if y < 28 else min(12, 5 + int((y - 28) * 0.45))
+        for x in range(13 - half, 13 + half + 1):
+            q[x, y] = dress_d if (x - 13 + 30) % 4 == 0 and y > 30 else dress
+        q[13 + half, y] = dress_d
+    for x in range(1, 25):
+        if q[x, h - 1][3]:
+            q[x, h - 1] = dress_d
+    # sleeves, and hands clasped at the waist holding a quill
+    for y in range(19, 30):
+        for x in (6, 7, 19, 20):
+            q[x, y] = dress_d if x in (6, 20) else dress
+    box(q, 8, 27, 19, 29, c("#2a1a2a"), w, h)  # a dark sash at the waist
+    for y in range(24, 30):  # forearms bending in to the hands
+        q[8 + (y - 24) // 2, y] = dress_d; q[18 - (y - 24) // 2, y] = dress_d
+    box(q, 11, 28, 16, 31, skin, w, h)
+    box(q, 11, 30, 16, 31, skin_d, w, h)
+    for i, (x, y) in enumerate(((16, 28), (17, 27), (18, 26), (19, 25), (20, 24), (21, 23), (22, 22))):
+        q[x, y] = c("#fff6e0") if i else c("#3a2a1a")
+        if i > 2:
+            q[x, y - 1] = c("#f4f0e6")
+    # lace collar and the velvet ribbon at her neck
+    box(q, 12, 16 + drop, 15, 18 + drop, skin, w, h)
+    box(q, 11, 17 + drop, 16, 18 + drop, c("#2a1a2a"), w, h)
+    for x in range(9, 18):
+        q[x, 18] = lace
+        if x % 2:
+            q[x, 19] = lace
+    # her head: hair parted down the middle and smoothed over the ears
+    cy = 10 + drop
+    for y in range(2, 18):
+        for x in range(6, 21):
+            if ((x - 13) / 5.2) ** 2 + ((y - cy) / 6.2) ** 2 <= 1:
+                q[x, y] = skin
+    for y in range(1, 18):
+        for x in range(5, 22):
+            inside = ((x - 13) / 6.3) ** 2 + ((y - cy + 1) / 7) ** 2 <= 1
+            # pulled back from the forehead, smoothed down over the ears
+            if inside and (y < cy - 4 + drop - (1 if 10 <= x <= 16 else 0) or x < 8 or x > 18) and y < cy + 3:
+                q[x, y] = hair
+    for y in range(cy - 7, cy - 4):
+        q[13, y] = hair_l  # the centre part
+    q[12, cy - 6] = hair_l; q[14, cy - 6] = hair_l
+    eye = c("#1a1418")
+    if face == "sleep":
+        for x in (10, 11, 15, 16):
+            q[x, cy + 1] = eye
+        q[13, cy + 4] = c("#9a4a3a")
+    elif face == "smile":
+        for x, y in ((10, cy + 1), (11, cy), (12, cy + 1), (14, cy + 1), (15, cy), (16, cy + 1)):
+            q[x, y] = eye
+        for x, y in ((11, cy + 3), (12, cy + 4), (13, cy + 4), (14, cy + 4), (15, cy + 3)):
+            q[x, y] = c("#9a4a3a")
+    else:  # a small, knowing smirk
+        q[11, cy] = eye; q[11, cy + 1] = eye; q[15, cy] = eye; q[15, cy + 1] = eye
+        for x, y in ((12, cy + 4), (13, cy + 4), (14, cy + 4), (15, cy + 3)):
+            q[x, y] = c("#9a4a3a")
+    q[9, cy + 3] = c("#f0b0a0"); q[17, cy + 3] = c("#f0b0a0")  # a little colour in her cheeks
+    outline(img)
+    return img
+
+
 def ui_sprites():
     ink = c("#141018")
     out = {
@@ -644,6 +770,10 @@ def ui_sprites():
             {"Y": c("#ffd84a"), "W": c("#fff2b0")})),
         "heart": heart(),
         "reset": reset_icon(),
+        "sound_on": speaker(True),
+        "sound_off": speaker(False),
+        "quill": quill(False),
+        "quill_open": quill(True),
     }
     return out
 
@@ -743,7 +873,9 @@ def prop_sprites():
             # what falls from each tree: summer leaves, storm-torn leaves, snow
             "leaf_0": with_outline(draw_map(["GG.", ".GL"], {"G": c("#5cb84a"), "L": c("#a6e070")})),
             "leaf_1": with_outline(draw_map(["BB.", ".BD"], {"B": c("#7a6a3a"), "D": c("#4a3a20")})),
-            "leaf_2": draw_map([".W.", "WLW", ".W."], {"W": c("#ffffff"), "L": c("#d8eeff")})}
+            "leaf_2": draw_map([".W.", "WLW", ".W."], {"W": c("#ffffff"), "L": c("#d8eeff")}),
+            # the finale's boss
+            "dickinson": dickinson("idle"), "dickinson_sleep": dickinson("sleep"), "dickinson_smile": dickinson("smile")}
 
 
 def main():
