@@ -49,6 +49,8 @@ namespace FlappyBird
         private bool showingPoem;
         private float timeScaleBeforePoem = 1f;
         private const string CreatorCredit = "Made by Alvin, Shridhar and Ishaan";
+        // Shown on the title screen and poem page. See the version history in README.md.
+        public const string VersionLabel = "BETA-VERSION - 1.5.0";
         // Public-domain text: Academy of American Poets, poem 254 (Johnson).
         private const string PoemText =
             "Hope is the thing with feathers\n"
@@ -177,6 +179,8 @@ namespace FlappyBird
         private bool worldSwapped;
         private SpriteRenderer backdropOld, groundOld;
         private Transform sceneryOld;
+        private readonly System.Collections.Generic.Dictionary<Transform, SpriteRenderer[]> sceneryArt =
+            new System.Collections.Generic.Dictionary<Transform, SpriteRenderer[]>();
         private Color skyFrom, skyTo;
         private int interludeFrom;
         private WeatherFx weather;
@@ -184,15 +188,27 @@ namespace FlappyBird
         private static readonly float[] SceneryAlpha = { 0.7f, 0.32f, 0.6f };
         // Tree that holds the nest (summer, storm or winter to match the world), and crash/fall effects.
         private SpriteRenderer treeCrown;
-        private SpriteRenderer[] nestArt = new SpriteRenderer[0];
         private Sprite featherArt;
-        private float nestFadeAt = -10, shakeUntil = -10, crashAt = -10;
+        private float shakeUntil = -10, crashAt = -10;
         private int lostHope;
         private bool showingTitle = true, newRecord;
         // The Gale's storm surge: gusts, lightning and the "sore" storm line.
         private float nextGustAt, gustAt = -10, nextBoltAt, boltAt = -10, surgeStart = -10;
         private int gustDirection;
-        private Rect playButton, titlePoemButton;
+        private Rect playButton, titlePoemButton, resetButton;
+
+        // ---- Smooth transitions. Everything that changes on screen eases in or out.
+        // WorldSpeed is how fast the world actually scrolls; it eases toward the gameplay pace
+        // (CurrentSpeed) so take-offs, recoveries, cutscenes and the finish never jump.
+        public float WorldSpeed { get; private set; }
+        private float bootAt, titleFadeAt = -10, poemFadeAt = -10, playStartAt = -10, readyAt = -10;
+        private float resumedAt = -10, completeAt = -10, dipAt = -10, shownEnergy = 100, smoothSurge;
+        private System.Action dipAction; // runs while the screen is dark, then it fades back
+        private bool poemClosing, buttonsLive = true;
+        private float uiAlpha = 1;
+        // Cutscene flight, and the next tree gliding in under the bird as the cutscene ends.
+        private float birdVelocity, birdTilt, arriveStart = -10, arriveDuration, arriveDistance, arrived;
+        private bool arriving;
         private float CrossfadeBlend => Mathf.SmoothStep(0, 1, Mathf.Clamp01((Time.time - crossfadeStart) / CrossfadeTime));
         private Transform pipes;
         private Transform nest;
@@ -297,6 +313,7 @@ namespace FlappyBird
             ApplyLevel();
             ResetRun();
             showingTitle = true;
+            bootAt = Time.unscaledTime;
         }
 
         // Keep the arena usable in very narrow windows too.
@@ -354,7 +371,6 @@ namespace FlappyBird
                     PixelArt.Prop("leaf_2", new Vector2(0.5f, 0.5f)) };
                 if (System.Array.TrueForAll(falling, sprite => sprite != null))
                     nest.gameObject.AddComponent<TreeLeaves>().Initialize(this, falling, treeCrown.transform, new Vector2(trunkX, 0.55f), 1.7f, groundBelow + 0.5f);
-                nestArt = nest.GetComponentsInChildren<SpriteRenderer>();
                 return;
             }
             Block("Branch", nest, new Vector2(-branchLength / 2 + 0.2f, -0.25f), new Vector2(branchLength, 0.15f), wood, false, 1);
@@ -409,7 +425,7 @@ namespace FlappyBird
             float scale = Screen.height / UiHeight;
             Vector2 ui = new Vector2(pointer.x / scale, (Screen.height - pointer.y) / scale);
             if (showingTitle) return playButton.Contains(ui) || titlePoemButton.Contains(ui);
-            return poemButton.Contains(ui) || playAgainButton.Contains(ui);
+            return poemButton.Contains(ui) || playAgainButton.Contains(ui) || resetButton.Contains(ui);
         }
 
         private void Update()
@@ -420,19 +436,38 @@ namespace FlappyBird
                 FitCamera();
                 ApplyLevelArt();
             }
+            if (dipAction != null && Time.unscaledTime - dipAt >= 0.3f)
+            {
+                System.Action action = dipAction;
+                dipAction = null;
+                action();
+            }
+            if (poemClosing && Time.unscaledTime - poemFadeAt >= 0.2f)
+            {
+                showingPoem = poemClosing = false;
+                Time.timeScale = timeScaleBeforePoem;
+            }
             if (showingPoem) return;
             AnimateScenery();
             AnimateBird();
-            float nestAlpha = Mathf.Clamp01((Time.time - nestFadeAt) / 0.6f);
-            foreach (SpriteRenderer piece in nestArt) piece.color = new Color(1, 1, 1, nestAlpha);
+            UpdateCrossfade();
+            shownEnergy = Mathf.MoveTowards(shownEnergy, Energy, 120 * Time.deltaTime);
+            smoothSurge = Mathf.MoveTowards(smoothSurge, StormSurge, 0.35f * Time.deltaTime);
             if (showingTitle)
             {
                 if (FlapPressed() && !PointerOverControls()) StartGame();
                 return;
             }
-            if (State == PlayState.Complete) return;
+            if (State == PlayState.Complete)
+            {
+                // The world glides to a stop and the bird hovers.
+                WorldSpeed = Mathf.MoveTowards(WorldSpeed, 0, pipeSpeed * Time.deltaTime / 1.2f);
+                ScrollWorld(WorldSpeed);
+                GlideBird(0);
+                return;
+            }
             if (State == PlayState.Interlude) { UpdateInterlude(); return; }
-            float surge = StormSurge;
+            float surge = smoothSurge;
             weather.Surge(surge);
             storm.Surge(surge);
             if (State == PlayState.GameOver)
@@ -447,15 +482,22 @@ namespace FlappyBird
                 {
                     Bird.BeginRecovery();
                     State = PlayState.Playing;
+                    resumedAt = Time.unscaledTime;
                 }
-                if (State == PlayState.Ready) State = PlayState.Playing;
+                if (State == PlayState.Ready)
+                {
+                    State = PlayState.Playing;
+                    playStartAt = Time.unscaledTime;
+                }
                 // Out of hope the bird still flies - it never stops - but its wingbeats are weaker.
                 Bird.Flap(Energy > 0 ? 1 : 0.8f);
             }
             if (State != PlayState.Playing) return;
             Energy = Mathf.Max(0, Energy - (energyDrain + 1.5f * LevelIndex) * Time.deltaTime);
             if (surge > 0) StormTurns(surge);
-            ScrollWorld(CurrentSpeed);
+            // Ease up to pace after taking off or getting back up.
+            WorldSpeed = Mathf.MoveTowards(WorldSpeed, CurrentSpeed, CurrentSpeed * Time.deltaTime / 0.45f);
+            ScrollWorld(WorldSpeed);
             spawnTimer -= Time.deltaTime;
             if (spawnTimer <= 0 && beatIndex < beats.Count)
             {
@@ -489,7 +531,7 @@ namespace FlappyBird
             }
         }
 
-        private void ScrollWorld(float speed)
+        private void ScrollWorld(float speed, bool keepNest = false)
         {
             float step = speed * Time.deltaTime;
             if (groundArt.sprite != null)
@@ -510,7 +552,8 @@ namespace FlappyBird
             if (nest.gameObject.activeSelf)
             {
                 nest.position += Vector3.left * step;
-                if (nest.position.x < -HalfWidth - 1) nest.gameObject.SetActive(false);
+                // The tree is wide: hide it only once all of it has scrolled off.
+                if (!keepNest && nest.position.x < -HalfWidth - 1.5f) nest.gameObject.SetActive(false);
             }
         }
 
@@ -526,7 +569,9 @@ namespace FlappyBird
         private void StartInterlude(int level)
         {
             State = PlayState.Interlude;
+            birdVelocity = Bird.VerticalSpeed; // keep the bird's momentum into the cutscene
             Bird.Stop();
+            arriving = false;
             interludeLevel = level;
             interludeFrom = LevelIndex;
             interludeStart = Time.time;
@@ -538,7 +583,24 @@ namespace FlappyBird
         private void UpdateInterlude()
         {
             float t = Time.time - interludeStart;
-            ScrollWorld(pipeSpeed);
+            if (arriving)
+            {
+                // The next tree glides in from the right, the world slows to meet it, and
+                // the bird settles into the nest. The distance follows a smooth curve that
+                // starts at the current speed and ends at rest.
+                float u = Mathf.Clamp01((Time.time - arriveStart) / arriveDuration);
+                float v0 = WorldSpeed * arriveDuration;
+                float travelled = v0 * (u - 2 * u * u + u * u * u) + arriveDistance * (3 * u * u - 2 * u * u * u);
+                ScrollWorld(Time.deltaTime > 0 ? (travelled - arrived) / Time.deltaTime : 0, true);
+                arrived = travelled;
+                GlideBird(0);
+                if (u >= 1) FinishInterlude();
+                return;
+            }
+            // Ease from gameplay pace to the cutscene's steady drift.
+            WorldSpeed = Mathf.MoveTowards(WorldSpeed, pipeSpeed, pipeSpeed * Time.deltaTime);
+            if (t < 0.8f) WorldSpeed = Mathf.Min(WorldSpeed, pipeSpeed * Mathf.SmoothStep(0, 1, t / 0.8f) + 0.01f);
+            ScrollWorld(WorldSpeed);
             // Leftover pipes fade out instead of vanishing.
             if (pipes.childCount > 0)
             {
@@ -551,27 +613,56 @@ namespace FlappyBird
                 if (fade <= 0) ClearPipes();
             }
             if (!worldSwapped && t >= 1f) SwapWorld();
-            float blend = CrossfadeBlend;
-            if (backdropOld != null && backdropOld.enabled)
-            {
-                backdropOld.color = groundOld.color = new Color(1, 1, 1, 1 - blend);
-                arenaCamera.backgroundColor = Color.Lerp(skyFrom, skyTo, blend);
-                if (blend >= 1) backdropOld.enabled = groundOld.enabled = false;
-            }
-            // The next world's weather rolls in from the right as the old one clears.
-            weather.Blend(interludeFrom, interludeLevel, interludeFrom == interludeLevel ? 1 : worldSwapped ? blend : 0);
-            if (blend >= 1 && sceneryOld != null) { Destroy(sceneryOld.gameObject); sceneryOld = null; }
-            if (blend >= 1 && interludeFrom == 1 && interludeLevel != 1) storm.gameObject.SetActive(false);
 
             // The bird flies the wave of words.
-            Vector3 at = Bird.transform.position;
-            float target = ribbon.Advance(Time.time, at.x, ToUi);
-            float y = Mathf.Lerp(at.y, target, 1 - Mathf.Exp(-5 * Time.deltaTime));
-            float climb = Time.deltaTime > 0 ? (y - at.y) / Time.deltaTime : 0;
-            Bird.transform.SetPositionAndRotation(new Vector3(at.x, y, 0), Quaternion.Euler(0, 0, Mathf.Clamp(climb * 5, -40, 25)));
+            GlideBird(ribbon.Advance(Time.time, Bird.transform.position.x, ToUi));
 
-            bool done = ribbon.AllCaught && Time.time - ribbon.LastCatchTime > 1.6f;
-            if (done || (t > 0.8f && FlapPressed() && !PointerOverControls())) FinishInterlude();
+            bool done = ribbon.AllCaught && Time.time - ribbon.LastCatchTime > 1.0f;
+            bool skip = t > 0.8f && FlapPressed() && !PointerOverControls();
+            if (done || skip) BeginArrival(skip ? 1.3f : 2.2f);
+        }
+
+        private void BeginArrival(float duration)
+        {
+            if (!worldSwapped) SwapWorld();
+            arriving = true;
+            arriveStart = Time.time;
+            arriveDuration = duration;
+            arrived = 0;
+            // Park the tree just past the right edge, as far from its spot as the world will travel.
+            float right = arenaCamera.orthographicSize * arenaCamera.aspect;
+            arriveDistance = right + 2.6f - nestStartPosition.x;
+            ClearPipes();
+            nest.localPosition = nestStartPosition + Vector3.right * arriveDistance;
+            nest.gameObject.SetActive(true);
+        }
+
+        // A damped spring toward a height, keeping momentum: used when the bird is not under physics.
+        private void GlideBird(float target)
+        {
+            float dt = Time.deltaTime;
+            Transform bird = Bird.transform;
+            birdVelocity += ((target - bird.position.y) * 28 - birdVelocity * 10) * dt;
+            float y = bird.position.y + birdVelocity * dt;
+            birdTilt = Mathf.Lerp(birdTilt, Mathf.Clamp(birdVelocity * 5, -40, 25), 1 - Mathf.Exp(-8 * dt));
+            bird.SetPositionAndRotation(new Vector3(bird.position.x, y, 0), Quaternion.Euler(0, 0, birdTilt));
+        }
+
+        // The old world fades out over the new one. Runs on its own, so it finishes smoothly
+        // even when the cutscene is skipped.
+        private void UpdateCrossfade()
+        {
+            if (backdropOld == null || !backdropOld.enabled) return;
+            float blend = CrossfadeBlend;
+            backdropOld.color = groundOld.color = new Color(1, 1, 1, 1 - blend);
+            arenaCamera.backgroundColor = Color.Lerp(skyFrom, skyTo, blend);
+            // The next world's weather rolls in from the right as the old one clears.
+            weather.Blend(interludeFrom, interludeLevel, blend);
+            if (blend < 1) return;
+            backdropOld.enabled = groundOld.enabled = false;
+            if (sceneryOld != null) { sceneryArt.Remove(sceneryOld); Destroy(sceneryOld.gameObject); sceneryOld = null; }
+            if (interludeFrom == 1 && LevelIndex != 1) storm.gameObject.SetActive(false);
+            weather.Set(LevelIndex);
         }
 
         // Keeps the old world on screen in front of the new one so they can cross-fade.
@@ -610,22 +701,14 @@ namespace FlappyBird
 
         private void FinishInterlude()
         {
-            if (!worldSwapped) SwapWorld();
-            if (backdropOld != null && backdropOld.enabled)
-            {
-                backdropOld.enabled = groundOld.enabled = false;
-                arenaCamera.backgroundColor = skyTo;
-            }
+            arriving = false;
             ribbon = null;
-            crossfadeStart = -10;
-            if (sceneryOld != null) { Destroy(sceneryOld.gameObject); sceneryOld = null; }
-            weather.Set(LevelIndex);
-            storm.gameObject.SetActive(LevelIndex == 1);
-            ClearPipes();
+            WorldSpeed = 0;
             Bird.ResetBird();
+            birdTilt = birdVelocity = 0;
             nest.localPosition = nestStartPosition;
             nest.gameObject.SetActive(true);
-            nestFadeAt = Time.time;
+            readyAt = Time.unscaledTime;
             State = PlayState.Ready;
             Energy = 100;
             pipesSpawned = 0;
@@ -742,8 +825,10 @@ namespace FlappyBird
             }
             else
             {
+                birdVelocity = Bird.VerticalSpeed;
                 Bird.Stop();
                 SaveBest();
+                completeAt = Time.unscaledTime;
                 State = PlayState.Complete;
             }
         }
@@ -774,11 +859,11 @@ namespace FlappyBird
             grass.color = LevelIndex == 0 ? new Color(0.55f, 0.81f, 0.35f)
                 : LevelIndex == 1 ? new Color(0.56f, 0.67f, 0.72f) : new Color(0.96f, 0.97f, 1f);
             storm.gameObject.SetActive(LevelIndex == 1);
-            if (sceneryOld != null) Destroy(sceneryOld.gameObject);
+            if (sceneryOld != null) { sceneryArt.Remove(sceneryOld); Destroy(sceneryOld.gameObject); }
             sceneryOld = null;
             // During a cutscene the old level's wind/motes/waves fade out instead of vanishing.
             if (scenery != null && State == PlayState.Interlude) sceneryOld = scenery;
-            else if (scenery != null) { scenery.gameObject.SetActive(false); Destroy(scenery.gameObject); }
+            else if (scenery != null) { sceneryArt.Remove(scenery); scenery.gameObject.SetActive(false); Destroy(scenery.gameObject); }
             if (State != PlayState.Interlude) weather.Set(LevelIndex);
             scenery = new GameObject("Level Imagery").transform;
             scenery.SetParent(transform, false);
@@ -847,16 +932,17 @@ namespace FlappyBird
         private void AnimateScenery(Transform group, int level, float visibility)
         {
             if (group == null) return;
+            if (!sceneryArt.TryGetValue(group, out SpriteRenderer[] arts))
+                sceneryArt[group] = arts = group.GetComponentsInChildren<SpriteRenderer>();
             float time = Time.time;
-            for (int i = 0; i < group.childCount; i++)
+            for (int i = 0; i < arts.Length; i++)
             {
-                Transform piece = group.GetChild(i);
+                SpriteRenderer art = arts[i];
                 float x = Mathf.Repeat(i * 1.73f - time * (level == 1 ? 2.2f : 0.5f), HalfWidth * 2 + 2) - HalfWidth - 1;
                 float y = level == 0 ? Floor + Mathf.Repeat(time * 0.5f + i * 0.43f, cameraHalfHeight - Floor)
                     : level == 1 ? Floor + 1 + Mathf.Repeat(i * 0.71f, cameraHalfHeight - Floor - 1.5f)
                     : Floor + 0.2f + (i % 3) * 0.2f + Mathf.Sin(time * 1.5f + i) * 0.1f;
-                piece.localPosition = new Vector3(x, y, 0);
-                SpriteRenderer art = piece.GetComponent<SpriteRenderer>();
+                art.transform.localPosition = new Vector3(x, y, 0);
                 Color c = art.color;
                 art.color = new Color(c.r, c.g, c.b, SceneryAlpha[level] * visibility);
             }
@@ -866,6 +952,7 @@ namespace FlappyBird
         {
             if (State != PlayState.Playing) return;
             Bird.Stop();
+            WorldSpeed = 0; // a crash is the one thing that stops dead
             Crashes++;
             resumeAt = Time.unscaledTime + 1f;
             // A crash shakes the screen, knocks feathers loose and costs hope - but never ends the run.
@@ -887,6 +974,8 @@ namespace FlappyBird
 
         private void StartGame()
         {
+            if (!showingTitle) return;
+            titleFadeAt = Time.unscaledTime;
             showingTitle = false;
             StartInterlude(LevelIndex);
         }
@@ -901,9 +990,22 @@ namespace FlappyBird
             PlayerPrefs.Save();
         }
 
+        // The corner button: back to this level's tree, keeping the crash count.
+        private void ResetLevel()
+        {
+            int crashes = Crashes;
+            ResetRun();
+            Crashes = crashes;
+        }
+
         public void ResetRun()
         {
             State = PlayState.Ready;
+            readyAt = Time.unscaledTime;
+            WorldSpeed = 0;
+            smoothSurge = 0;
+            surgeStart = -10;
+            shownEnergy = 100;
             ClearPipes();
             levelStartScore = 0;
             for (int level = 0; level < LevelIndex; level++) levelStartScore += BeatsIn(level);
@@ -919,16 +1021,52 @@ namespace FlappyBird
             nest.gameObject.SetActive(true);
         }
 
+        // The poem page fades in and out (on unscaled time, since the game is paused under it).
         private void SetPoemVisible(bool visible)
         {
-            if (showingPoem == visible) return;
-            showingPoem = visible;
             if (visible)
             {
-                timeScaleBeforePoem = Time.timeScale;
-                Time.timeScale = 0;
+                if (showingPoem && !poemClosing) return;
+                if (!showingPoem)
+                {
+                    timeScaleBeforePoem = Time.timeScale;
+                    Time.timeScale = 0;
+                }
+                showingPoem = true;
+                poemClosing = false;
+                poemFadeAt = Time.unscaledTime;
             }
-            else Time.timeScale = timeScaleBeforePoem;
+            else if (showingPoem && !poemClosing)
+            {
+                poemClosing = true;
+                poemFadeAt = Time.unscaledTime;
+            }
+        }
+
+        private float PoemAlpha
+        {
+            get
+            {
+                float t = Mathf.Clamp01((Time.unscaledTime - poemFadeAt) / 0.2f);
+                return poemClosing ? 1 - t : t;
+            }
+        }
+
+        // Dip to dark, do something while nothing can be seen, and fade back.
+        private void DipToDark(System.Action action)
+        {
+            if (dipAction != null) return;
+            dipAt = Time.unscaledTime;
+            dipAction = action;
+        }
+
+        private float DipAlpha
+        {
+            get
+            {
+                float t = Time.unscaledTime - dipAt;
+                return t < 0.3f ? t / 0.3f : Mathf.Clamp01(1 - (t - 0.3f) / 0.45f);
+            }
         }
 
         private void OnGUI()
@@ -939,10 +1077,30 @@ namespace FlappyBird
             Color previousColor = GUI.color;
             GUI.matrix = Matrix4x4.Scale(new Vector3(scale, scale, 1));
             GUI.color = Color.white;
-            playAgainButton = Rect.zero;
-            if (showingPoem) DrawPoem(width);
-            else if (showingTitle) DrawTitle(width);
-            else DrawHud(width);
+            playAgainButton = resetButton = Rect.zero;
+            float now = Time.unscaledTime;
+            // Underneath: the title (fading out once you press Play) or the HUD (fading in).
+            buttonsLive = !showingPoem;
+            float sinceTitle = now - titleFadeAt;
+            if (showingTitle) { uiAlpha = 1; DrawTitle(width); }
+            else
+            {
+                if (sinceTitle < 0.5f) { uiAlpha = 1 - sinceTitle / 0.5f; GUI.color = new Color(1, 1, 1, uiAlpha); DrawTitle(width); }
+                uiAlpha = Mathf.Clamp01((sinceTitle - 0.3f) / 0.5f);
+                GUI.color = new Color(1, 1, 1, uiAlpha);
+                DrawHud(width);
+            }
+            if (showingPoem)
+            {
+                buttonsLive = true;
+                uiAlpha = PoemAlpha;
+                GUI.color = new Color(1, 1, 1, uiAlpha);
+                DrawPoem(width);
+            }
+            uiAlpha = 1;
+            GUI.color = Color.white;
+            float dark = Mathf.Max(DipAlpha, 1 - (now - bootAt) / 0.8f);
+            if (dark > 0) PixelUi.Fill(new Rect(0, 0, width, UiHeight), new Color(0.04f, 0.03f, 0.08f, dark));
             PixelUi.Frame(new Rect(0, 0, width, UiHeight), "screen_frame", 4);
             GUI.color = previousColor;
             GUI.matrix = previousMatrix;
@@ -953,6 +1111,9 @@ namespace FlappyBird
             float now = Time.unscaledTime;
             Color accent = LevelAccent[LevelIndex];
             Rect fullScreen = new Rect(0, 0, width, UiHeight);
+            // Full-screen effects (flashes, the dawn) are part of the world, not the HUD's fade.
+            Color hudColor = GUI.color;
+            GUI.color = Color.white;
             float sinceCrash = now - crashAt;
             if (sinceCrash < 0.15f) PixelUi.Fill(fullScreen, new Color(1, 1, 1, 0.35f * (1 - sinceCrash / 0.15f)));
             float sinceBolt = now - boltAt;
@@ -983,10 +1144,14 @@ namespace FlappyBird
                     PixelUi.Fill(screen, new Color(1, 1, 1, 0.45f));
             }
 
+            GUI.color = hudColor;
             // The words fall away as you go: all of them on level 1, fewer on 2, none on 3.
             int words = State == PlayState.Complete ? 2 : 2 - LevelIndex;
 
-            // Level card: name, progress, and the stanza's rhyme scheme as coloured blocks.
+            // Level card: name, progress, and the stanza's rhyme scheme as coloured blocks. It dips
+            // out and back as the world changes, so the name never swaps mid-frame.
+            float sinceSwapCard = Time.time - crossfadeStart;
+            Fade(sinceSwapCard < 0.6f ? Mathf.Abs(1 - sinceSwapCard / 0.3f) : 1);
             string levelName = LevelNames[LevelIndex].ToUpperInvariant();
             int progress = State == PlayState.Complete ? PipesThisLevel : Score - levelStartScore;
             Rect card = new Rect(UiMargin, UiMargin, Mathf.Max(words > 0 ? PixelUi.TextWidth(levelName, 4) : 0, 150) + 36, 96);
@@ -1010,6 +1175,7 @@ namespace FlappyBird
             }
             if (words == 2) PixelUi.Text(RhymeSchemes[LevelIndex], card.x + 18 + stanza.Length * 21 + 6, card.y + 74, 2, UiMuted);
 
+            Fade(1);
             // The scoreboard is just your crashes; it pops (and flushes red) when one happens.
             if (Crashes != shownCrashes) { if (Crashes > shownCrashes) crashPopAt = now; shownCrashes = Crashes; }
             bool popping = now - crashPopAt < 0.2f;
@@ -1043,7 +1209,7 @@ namespace FlappyBird
             PixelUi.Icon("heart", bar.x - heartIcon.x - 6, bar.y + (bar.height - heartIcon.y) / 2);
             PixelUi.Frame(bar, "bar");
             Rect trough = new Rect(bar.x + 9, bar.y + 9, bar.width - 18, bar.height - 18);
-            Rect fill = new Rect(trough.x, trough.y, Mathf.Round(trough.width * Mathf.Clamp01(Energy / 100) / 3) * 3, trough.height);
+            Rect fill = new Rect(trough.x, trough.y, Mathf.Round(trough.width * Mathf.Clamp01(shownEnergy / 100) / 3) * 3, trough.height);
             bool low = Energy < 30;
             bool flash = now - hopeFlashAt < 0.2f;
             if (!low || Mathf.Repeat(now * 4, 1) < 0.6f)
@@ -1070,12 +1236,17 @@ namespace FlappyBird
 
             // Centre messages.
             float bob = Mathf.Round(Mathf.Sin(now * 4) * 2) * 3;
-            bool banner = State == PlayState.Ready || now - bannerStart < 2.6f;
-            if (banner && words > 0 && (State == PlayState.Ready || State == PlayState.Playing))
+            // The level banner fades in when a level is ready and out on the first flap.
+            float sinceReady = now - readyAt, sinceStart = now - playStartAt;
+            float bannerAlpha = State == PlayState.Ready ? Mathf.Clamp01(sinceReady / 0.5f)
+                : State == PlayState.Playing && playStartAt > readyAt ? Mathf.Clamp01(1 - sinceStart / 0.4f)
+                : 0;
+            bool midRunBanner = now - bannerStart < 2.6f && State == PlayState.Playing;
+            if (midRunBanner) bannerAlpha = Mathf.Clamp01((2.6f - (now - bannerStart)) / 0.5f);
+            if (bannerAlpha > 0 && words > 0)
             {
-                float fade = State == PlayState.Ready ? 1 : Mathf.Clamp01((2.6f - (now - bannerStart)) / 0.5f);
-                float slide = State == PlayState.Ready ? 0 : Mathf.Round(Mathf.Clamp01(1 - (now - bannerStart) / 0.25f) * 8) * 3;
-                GUI.color = new Color(1, 1, 1, fade);
+                float slide = midRunBanner ? Mathf.Round(Mathf.Clamp01(1 - (now - bannerStart) / 0.25f) * 8) * 3 : 0;
+                Fade(bannerAlpha);
                 string line = LevelLines[LevelIndex].ToUpperInvariant();
                 Rect panel = new Rect(0, 214 - slide, Mathf.Max(PixelUi.TextWidth(levelName, 7), PixelUi.TextWidth(line, 2)) + 60, 124);
                 panel.x = Mathf.Round((width - panel.width) / 2);
@@ -1083,23 +1254,29 @@ namespace FlappyBird
                 if (words == 2) PixelUi.Text("LEVEL " + (LevelIndex + 1), width / 2, panel.y + 18, 2, UiMuted, 0.5f);
                 PixelUi.Text(levelName, width / 2, panel.y + 40, 7, accent, 0.5f);
                 PixelUi.Text(line, width / 2, panel.y + 90, 2, Color.white, 0.5f);
-                GUI.color = Color.white;
+                Fade(1);
             }
             float sinceSurge = now - surgeStart;
             if (LevelIndex == 1 && surgeStart > 0 && sinceSurge < 3f)
             {
-                GUI.color = new Color(1, 1, 1, Mathf.Clamp01((3f - sinceSurge) / 0.6f));
+                Fade(Mathf.Clamp01((3f - sinceSurge) / 0.6f));
                 PixelUi.Text("AND SORE MUST BE THE STORM -", width / 2, 150 + Mathf.Round(Mathf.Clamp01(1 - sinceSurge / 0.3f) * 6) * 3, 3,
                     new Color(1f, 0.55f, 0.45f), 0.5f);
-                GUI.color = Color.white;
+                Fade(1);
             }
-            if (State == PlayState.Ready)
+            if (State == PlayState.Ready || bannerAlpha > 0 && !midRunBanner)
             {
+                Fade(bannerAlpha);
                 if (words > 0) PixelUi.Text("SPACE OR CLICK TO FLY", width / 2, 520 + bob, 3, Color.white, 0.5f);
                 if (words == 2) PixelUi.Text("FLY TO THE BEAT - DASHES ARE BREATHS, MATCHING COLOURS RHYME", width / 2, 556, 2, UiMuted, 0.5f);
+                Fade(1);
             }
-            else if (State == PlayState.GameOver || State == PlayState.AwaitingFlap)
+            float sinceResume = now - resumedAt;
+            bool crashPanel = State == PlayState.GameOver || State == PlayState.AwaitingFlap;
+            if (crashPanel || State == PlayState.Playing && resumedAt > crashAt && sinceResume < 0.25f)
             {
+                // Fades in on impact, out as you fly on.
+                Fade(crashPanel ? Mathf.Clamp01(sinceCrash / 0.15f) : 1 - sinceResume / 0.25f);
                 Rect panel = new Rect(0, 300, words > 0 ? 372 : 150, State == PlayState.AwaitingFlap && words > 0 ? 96 : 66);
                 panel.x = Mathf.Round((width - panel.width) / 2);
                 PixelUi.Frame(panel, "panel");
@@ -1113,9 +1290,11 @@ namespace FlappyBird
                 }
                 if (State == PlayState.AwaitingFlap && words > 0 && Mathf.Repeat(now, 1) < 0.7f)
                     PixelUi.Text("SPACE OR CLICK TO RISE AGAIN", width / 2, panel.y + 60, 2, UiMuted, 0.5f);
+                Fade(1);
             }
-            else if (State == PlayState.Complete)
+            if (State == PlayState.Complete)
             {
+                Fade(Mathf.Clamp01((now - completeAt - 0.4f) / 0.6f));
                 Rect panel = new Rect(0, 250, 420, 202);
                 panel.x = Mathf.Round((width - panel.width) / 2);
                 PixelUi.Frame(panel, "panel");
@@ -1125,7 +1304,15 @@ namespace FlappyBird
                 PixelUi.Text(newRecord ? "NEW RECORD - FEWEST YET" : $"FEWEST {FewestCrashes}", width / 2, panel.y + 108,
                     2, newRecord ? accent : UiMuted, 0.5f);
                 playAgainButton = new Rect(width / 2 - 96, panel.y + 134, 192, 48);
-                if (Button(playAgainButton, "PLAY AGAIN", 3)) SelectLevel(0);
+                if (Button(playAgainButton, "PLAY AGAIN", 3)) DipToDark(() => SelectLevel(0));
+                Fade(1);
+            }
+
+            // Back to this level's tree, from any point in the level.
+            if (State == PlayState.Ready || State == PlayState.Playing || State == PlayState.GameOver || State == PlayState.AwaitingFlap)
+            {
+                resetButton = new Rect(UiMargin, UiHeight - UiMargin - 42, words > 0 ? 168 : 54, 42);
+                if (Button(resetButton, words > 0 ? "RESET LEVEL" : "", 2, "reset")) DipToDark(ResetLevel);
             }
 
             if (State == PlayState.Interlude && ribbon != null)
@@ -1133,8 +1320,11 @@ namespace FlappyBird
                 float t = Time.time - interludeStart;
                 float alpha = Mathf.Clamp01((t - 0.4f) / 0.4f);
                 if (ribbon.AllCaught) alpha *= Mathf.Clamp01(1 - (Time.time - ribbon.LastCatchTime - 1.2f) / 0.4f);
-                ribbon.Draw(Time.time, width, LevelAccent[interludeLevel], alpha, ToUi);
-                if (t > 0.8f && interludeLevel < 2) PixelUi.Text("SPACE TO SKIP", width / 2, UiHeight - UiMargin - 96, 2, UiMuted, 0.5f);
+                if (arriving) alpha *= Mathf.Clamp01(1 - (Time.time - arriveStart) / 0.5f);
+                ribbon.Draw(Time.time, width, LevelAccent[interludeLevel], alpha * uiAlpha, ToUi);
+                Fade(alpha);
+                if (t > 0.8f && !arriving && interludeLevel < 2) PixelUi.Text("SPACE TO SKIP", width / 2, UiHeight - UiMargin - 96, 2, UiMuted, 0.5f);
+                Fade(1);
             }
 
             // Credits, small, bottom right (gone with the other words on the last level).
@@ -1167,6 +1357,7 @@ namespace FlappyBird
             if (Button(playButton, "PLAY", 4)) StartGame();
             titlePoemButton = new Rect(playButton.xMax + 12, 574, 120, 54);
             if (Button(titlePoemButton, "POEM", 3)) SetPoemVisible(true);
+            PixelUi.SmallPrint(VersionLabel, UiMargin, UiHeight - UiMargin - 15, new Color(1, 1, 1, 0.7f));
             string hint = FewestCrashes >= 0 ? $"FEWEST CRASHES {FewestCrashes}  -  OR PRESS SPACE" : "OR PRESS SPACE";
             if (Mathf.Repeat(now, 1.2f) < 0.8f) PixelUi.Text(hint, width / 2, 646, 2, Color.white, 0.5f);
 
@@ -1207,20 +1398,30 @@ namespace FlappyBird
             PixelUi.Text("POEM 254 (JOHNSON) / 314 (FRANKLIN)", center, page.yMax - 148, 2, faded, 0.5f, false);
             PixelUi.Text("PUBLIC-DOMAIN TEXT: ACADEMY OF AMERICAN POETS", center, page.yMax - 132, 2, faded, 0.5f, false);
             PixelUi.Text(CreatorCredit, center, page.yMax - 108, 2, ink, 0.5f, false);
+            PixelUi.Text(VersionLabel, page.xMax - 18, page.yMax - 24, 2, faded, 1, false);
             string label = showingTitle ? "BACK" : "BACK TO THE GAME";
             Rect button = new Rect(0, page.yMax - 80, PixelUi.TextWidth(label, 3) + 48, 48);
             button.x = Mathf.Round(center - button.width / 2);
             if (Button(button, label, 3)) SetPoemVisible(false);
         }
 
-        private static bool Button(Rect rect, string label, float size)
+        private bool Button(Rect rect, string label, float size, string icon = null)
         {
-            bool hover = rect.Contains(Event.current.mousePosition);
+            bool hover = buttonsLive && rect.Contains(Event.current.mousePosition);
             PixelUi.Frame(rect, hover ? "button_hover" : "button");
-            PixelUi.Text(label, rect.center.x, rect.y + (rect.height - 5 * size) / 2 - Mathf.Floor(size / 2), size,
-                new Color(0.23f, 0.12f, 0.05f), 0.5f, false);
-            return GUI.Button(rect, GUIContent.none, GUIStyle.none);
+            Vector2 iconSize = icon != null ? PixelUi.IconSize(icon) : Vector2.zero;
+            float labelWidth = label.Length > 0 ? PixelUi.TextWidth(label, size) : 0;
+            float gap = iconSize.x > 0 && labelWidth > 0 ? 8 : 0;
+            float x = rect.center.x - (iconSize.x + gap + labelWidth) / 2;
+            if (icon != null) PixelUi.Icon(icon, x, rect.center.y - iconSize.y / 2);
+            PixelUi.Text(label, x + iconSize.x + gap, rect.y + (rect.height - 5 * size) / 2 - Mathf.Floor(size / 2), size,
+                new Color(0.23f, 0.12f, 0.05f), 0, false);
+            // Buttons under the poem page are drawn but can't be pressed.
+            return buttonsLive && GUI.Button(rect, GUIContent.none, GUIStyle.none);
         }
+
+        // Fades a group of HUD elements, on top of whatever fade the whole HUD has.
+        private void Fade(float alpha) => GUI.color = new Color(1, 1, 1, alpha * uiAlpha);
 
         private void OnDestroy()
         {

@@ -13,14 +13,17 @@ namespace FlappyBird
         {
             public string Text;
             public int Line;
+            public float SlotWidth; // width at the small size used in the finished stanza
             public float X, Y; // X along the ribbon, Y in world units
             public float CaughtAt = -1;
             public Vector2 CaughtFrom; // GUI position when caught
         }
 
-        private const float WordGap = 0.45f, LineGap = 0.9f, CatchTime = 0.55f;
+        private const float WordGap = 0.45f, LineGap = 0.9f, CatchTime = 0.55f, Space = 8;
         private readonly List<Word> words = new List<Word>();
         private readonly int lineCount;
+        private readonly float[] lineWidths;
+        private float widest;
         private readonly float startX, startTime, speed;
 
         public float LastCatchTime { get; private set; } = -1;
@@ -47,6 +50,14 @@ namespace FlappyBird
             }
             // Long stanzas move faster so no cutscene runs much past seven seconds.
             speed = Mathf.Max(5f, x / 7f);
+            // Measure the finished stanza's layout once instead of every frame.
+            lineWidths = new float[lineCount];
+            foreach (Word word in words)
+            {
+                word.SlotWidth = PixelUi.TextWidth(word.Text, 2);
+                lineWidths[word.Line] += word.SlotWidth + Space;
+            }
+            for (int i = 0; i < lineCount; i++) widest = Mathf.Max(widest, lineWidths[i] - Space);
         }
 
         // Dashes ride along with the word before them.
@@ -93,13 +104,8 @@ namespace FlappyBird
         // GUI only. alpha fades the whole thing in and out.
         public void Draw(float time, float width, Color accent, float alpha, Func<Vector2, Vector2> toUi)
         {
+            if (Event.current.type != EventType.Repaint) return;
             const float lineHeight = 20, top = 128;
-            const float space = 8;
-            // Lay the finished stanza out, centred, at the top of the screen.
-            float[] lineWidths = new float[lineCount];
-            foreach (Word word in words) lineWidths[word.Line] += PixelUi.TextWidth(word.Text, 2) + space;
-            float widest = 0;
-            for (int i = 0; i < lineCount; i++) widest = Mathf.Max(widest, lineWidths[i] - space);
 
             Color previous = GUI.color;
             GUI.color = new Color(1, 1, 1, alpha);
@@ -107,13 +113,12 @@ namespace FlappyBird
             PixelUi.Frame(panel, "panel");
 
             float[] cursor = new float[lineCount];
-            for (int i = 0; i < lineCount; i++) cursor[i] = (width - (lineWidths[i] - space)) / 2;
+            for (int i = 0; i < lineCount; i++) cursor[i] = (width - (lineWidths[i] - Space)) / 2;
             float offset = Offset(time);
             foreach (Word word in words)
             {
-                float slotWidth = PixelUi.TextWidth(word.Text, 2);
-                Vector2 slot = new Vector2(cursor[word.Line] + slotWidth / 2, top + 19 + word.Line * lineHeight);
-                cursor[word.Line] += slotWidth + space;
+                Vector2 slot = new Vector2(cursor[word.Line] + word.SlotWidth / 2, top + 19 + word.Line * lineHeight);
+                cursor[word.Line] += word.SlotWidth + Space;
 
                 if (word.CaughtAt >= 0)
                 {

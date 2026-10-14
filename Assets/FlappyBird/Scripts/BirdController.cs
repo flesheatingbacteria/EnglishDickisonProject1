@@ -11,6 +11,7 @@ namespace FlappyBird
         private CircleCollider2D hitbox;
         private float recoveryUntil;
         public bool Recovering { get; private set; }
+        public float VerticalSpeed => body.linearVelocity.y;
 
         public void Initialize(FlappyBirdGame owner, float gravity, float impulse)
         {

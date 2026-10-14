@@ -180,7 +180,10 @@ def make_pipe(length, top, body, body_hi, cap, cap_hi, extra=None):
     cap_y = length - ch if top else 0
     b0, b1 = (0, cap_y) if top else (ch, length)
     box(px, 3, b0, 3 + bw, b1, c(body), cw + 2, length + 8)
-    box(px, 5, b0, 8, b1, c(body_hi), cw + 2, length + 8)
+    # a wobbly, hand-drawn highlight: its width changes every 6 rows (repeating every 18,
+    # the body tile height, so tiled pipes still line up)
+    for y in range(b0, b1):
+        box(px, 5, y, 5 + (3, 2, 4)[(y % 18) // 6], y + 1, c(body_hi), cw + 2, length + 8)
     box(px, 1, cap_y, 1 + cw, cap_y + ch, c(cap), cw + 2, length + 8)
     box(px, 3, cap_y + 1, 6, cap_y + ch - 1, c(cap_hi), cw + 2, length + 8)
     if extra:
@@ -447,7 +450,7 @@ def build(level, birds, hurt):
     n = level["n"]
     wide = scuff(level["bg"](), 20 + n, shape=False, tint=0.015)
     gr = scuff(level["ground"](), 30 + n, shape=False, tint=0.04)
-    fn = lambda length, top, make=level["pipe"]: scuff(make(length, top), 40 + n, shape=False, tint=0.04)
+    fn = lambda length, top, make=level["pipe"]: scuff(make(length, top), 40 + n, shape=True, tint=0.07)
     bg = wide.crop((MID, 0, MID + W, H))
     title = text(level["title"], level["title_col"], scale=3 if len(level["title"]) < 9 else 2)
 
@@ -601,6 +604,19 @@ SCREEN_ROWS = [
 ]
 
 
+def reset_icon():
+    """A circular arrow: back to the start of the level."""
+    return draw_map([
+        "...###.#.",
+        "..#...##.",
+        ".#...###.",
+        ".#.......",
+        ".#.....#.",
+        "..#...#..",
+        "...###...",
+    ], {"#": c("#3a1f0d")})
+
+
 def heart():
     return with_outline(draw_map([
         ".RR..RRR.",
@@ -628,6 +644,7 @@ def ui_sprites():
             {"Y": c("#ffd84a"), "W": c("#fff2b0")})),
         "heart": heart(),
         "note": NOTE,
+        "reset": reset_icon(),
     }
     return out
 
