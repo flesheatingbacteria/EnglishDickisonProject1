@@ -47,16 +47,25 @@ namespace FlappyBird
         private const string BestKey = "FlappyBird.BestScore";
         public int LevelIndex { get; private set; }
         public const int ObstaclesPerLevel = 8;
-        private static readonly string[] LevelNames = { "The Gale", "Keeping Hope Warm", "At Sea" };
+        // One level per stanza, in the poem's order.
+        private static readonly string[] LevelNames = { "Hope", "The Gale", "Extremity" };
         private static readonly string[] LevelLines = {
+            "\"Hope\" is the thing with feathers -",
             "And sweetest - in the Gale - is heard -",
-            "That kept so many warm -",
-            "And on the strangest Sea -"
+            "I've heard it in the chillest land -"
         };
+        // DickinsonMusic themes: 0 = Gale, 1 = Warmth, 2 = Sea.
+        private static readonly int[] LevelMusic = { 1, 0, 2 };
         private Camera arenaCamera;
         private DickinsonMusic music;
         private Transform scenery;
         private SpriteRenderer ground, grass;
+        // Pixel art (null when the sprites are missing; the placeholder blocks are used instead).
+        private SpriteRenderer groundArt, birdArt;
+        private Sprite[] birdFrames;
+        private Sprite birdHurt;
+        private Transform backdrop;
+        private float groundScroll;
         private Transform pipes;
         private Transform nest;
         private FollowingStorm storm;
@@ -105,6 +114,10 @@ namespace FlappyBird
             ground = Block("Ground", transform, new Vector2(0, Floor - 0.35f), new Vector2(HalfWidth * 2 + 4, 0.7f), new Color(0.8f, 0.68f, 0.42f), true).GetComponent<SpriteRenderer>();
             grass = Block("Grass", transform, new Vector2(0, Floor - 0.04f), new Vector2(HalfWidth * 2 + 4, 0.12f), new Color(0.5f, 0.77f, 0.24f), false).GetComponent<SpriteRenderer>();
             Block("Ceiling", transform, new Vector2(0, cameraHalfHeight + 0.5f), new Vector2(HalfWidth * 2 + 4, 1), Color.clear, true);
+            groundArt = new GameObject("Ground Art", typeof(SpriteRenderer)).GetComponent<SpriteRenderer>();
+            groundArt.transform.SetParent(transform, false);
+            groundArt.drawMode = SpriteDrawMode.Tiled;
+            groundArt.sortingOrder = 4;
             CreateNest();
 
             GameObject bird = new GameObject("Bird", typeof(SpriteRenderer), typeof(Rigidbody2D), typeof(CircleCollider2D), typeof(BirdController));
@@ -115,9 +128,21 @@ namespace FlappyBird
             renderer.sortingOrder = 5;
             // Scale visuals independently so the collision radius stays in world units.
             renderer.enabled = false;
-            Block("Body", bird.transform, Vector2.zero, new Vector2(0.58f, 0.44f), renderer.color, false, 5);
-            Block("Beak", bird.transform, new Vector2(0.34f, -0.04f), new Vector2(0.22f, 0.13f), new Color(1, 0.42f, 0.1f), false, 6);
-            Block("Eye", bird.transform, new Vector2(0.16f, 0.1f), new Vector2(0.08f, 0.08f), Color.black, false, 7);
+            GameObject[] placeholder = {
+                Block("Body", bird.transform, Vector2.zero, new Vector2(0.58f, 0.44f), renderer.color, false, 5),
+                Block("Beak", bird.transform, new Vector2(0.34f, -0.04f), new Vector2(0.22f, 0.13f), new Color(1, 0.42f, 0.1f), false, 6),
+                Block("Eye", bird.transform, new Vector2(0.16f, 0.1f), new Vector2(0.08f, 0.08f), Color.black, false, 7)
+            };
+            birdFrames = new[] { PixelArt.Bird("up"), PixelArt.Bird("mid"), PixelArt.Bird("down") };
+            birdHurt = PixelArt.Bird("hurt");
+            if (birdFrames[0] != null && birdFrames[1] != null && birdFrames[2] != null)
+            {
+                birdArt = new GameObject("Bird Art", typeof(SpriteRenderer)).GetComponent<SpriteRenderer>();
+                birdArt.transform.SetParent(bird.transform, false);
+                birdArt.sprite = birdFrames[1];
+                birdArt.sortingOrder = 5;
+                foreach (GameObject piece in placeholder) piece.SetActive(false);
+            }
             Bird = bird.GetComponent<BirdController>();
             Bird.Initialize(this, gravityScale, flapSpeed);
             GameObject stormObject = new GameObject("Following Storm", typeof(FollowingStorm));
@@ -207,6 +232,7 @@ namespace FlappyBird
         {
             if (showingPoem) return;
             AnimateScenery();
+            AnimateBird();
             if (State == PlayState.Complete) return;
             if (State == PlayState.GameOver)
             {
@@ -225,6 +251,12 @@ namespace FlappyBird
                 Bird.Flap();
             }
             if (State != PlayState.Playing) return;
+            if (groundArt.sprite != null)
+            {
+                // Shift by whole tiles only, so the wrap is invisible.
+                groundScroll = Mathf.Repeat(groundScroll + pipeSpeed * Time.deltaTime, groundArt.sprite.bounds.size.x);
+                groundArt.transform.localPosition = new Vector3(-groundScroll, Floor, 0);
+            }
             if (nest.gameObject.activeSelf)
             {
                 nest.position += Vector3.left * pipeSpeed * Time.deltaTime;
@@ -249,12 +281,33 @@ namespace FlappyBird
             pair.GetComponent<PipePair>().Initialize(this);
             float bottomEdge = middle - gap / 2;
             float topEdge = middle + gap / 2;
-            Color green = LevelIndex == 0 ? new Color(0.38f, 0.48f, 0.62f)
-                : LevelIndex == 1 ? new Color(0.65f, 0.23f, 0.12f) : new Color(0.15f, 0.5f, 0.52f);
+            Color green = LevelIndex == 0 ? new Color(0.36f, 0.66f, 0.3f)
+                : LevelIndex == 1 ? new Color(0.38f, 0.48f, 0.62f) : new Color(0.5f, 0.75f, 0.88f);
             Block("Lower Pipe", pair.transform, new Vector2(0, (Floor + bottomEdge) / 2), new Vector2(pipeWidth, bottomEdge - Floor), green, true, 2);
             Block("Upper Pipe", pair.transform, new Vector2(0, (cameraHalfHeight + topEdge) / 2), new Vector2(pipeWidth, cameraHalfHeight - topEdge), green, true, 2);
             Block("Lower Rim", pair.transform, new Vector2(0, bottomEdge - 0.12f), new Vector2(pipeWidth + 0.14f, 0.24f), green, true, 3);
             Block("Upper Rim", pair.transform, new Vector2(0, topEdge + 0.12f), new Vector2(pipeWidth + 0.14f, 0.24f), green, true, 3);
+
+            // Pixel art drawn over the same colliders; the blocks stay for collision only.
+            Sprite topArt = PixelArt.TopPipe(LevelIndex), bottomArt = PixelArt.BottomPipe(LevelIndex);
+            if (topArt == null || bottomArt == null) return;
+            foreach (SpriteRenderer block in pair.GetComponentsInChildren<SpriteRenderer>()) block.enabled = false;
+            float screenTop = arenaCamera.orthographicSize + 1;
+            float overhang = PixelArt.TopPipeOverhangRows / PixelArt.PixelsPerUnit;
+            PipeArt(pair.transform, topArt, screenTop, screenTop - topEdge + overhang);
+            PipeArt(pair.transform, bottomArt, Floor - 1, bottomEdge - Floor + 1);
+        }
+
+        private static void PipeArt(Transform pair, Sprite sprite, float y, float height)
+        {
+            SpriteRenderer art = new GameObject("Pipe Art", typeof(SpriteRenderer)).GetComponent<SpriteRenderer>();
+            art.transform.SetParent(pair, false);
+            art.transform.localPosition = new Vector3(0, y, 0);
+            art.sprite = sprite;
+            art.drawMode = SpriteDrawMode.Tiled;
+            art.tileMode = SpriteTileMode.Continuous;
+            art.size = new Vector2(sprite.bounds.size.x, height);
+            art.sortingOrder = 3;
         }
 
         public void AddScore()
@@ -294,32 +347,76 @@ namespace FlappyBird
 
         private void ApplyLevel()
         {
-            arenaCamera.backgroundColor = LevelIndex == 0 ? new Color(0.24f, 0.34f, 0.48f)
-                : LevelIndex == 1 ? new Color(0.4f, 0.19f, 0.16f) : new Color(0.1f, 0.35f, 0.5f);
-            ground.color = LevelIndex == 1 ? new Color(0.32f, 0.13f, 0.1f) : new Color(0.28f, 0.36f, 0.4f);
-            grass.color = LevelIndex == 0 ? new Color(0.56f, 0.67f, 0.72f)
-                : LevelIndex == 1 ? new Color(1f, 0.5f, 0.17f) : new Color(0.38f, 0.78f, 0.86f);
-            storm.gameObject.SetActive(LevelIndex == 0);
+            // 0 Hope: dawn, drifting motes. 1 The Gale: storm, wind, following storm. 2 Extremity: frozen sea, waves.
+            arenaCamera.backgroundColor = LevelIndex == 0 ? new Color(0.78f, 0.7f, 0.92f)
+                : LevelIndex == 1 ? new Color(0.18f, 0.2f, 0.28f) : new Color(0.06f, 0.09f, 0.23f);
+            ground.color = LevelIndex == 0 ? new Color(0.78f, 0.61f, 0.42f)
+                : LevelIndex == 1 ? new Color(0.28f, 0.36f, 0.4f) : new Color(0.61f, 0.77f, 0.89f);
+            grass.color = LevelIndex == 0 ? new Color(0.55f, 0.81f, 0.35f)
+                : LevelIndex == 1 ? new Color(0.56f, 0.67f, 0.72f) : new Color(0.96f, 0.97f, 1f);
+            storm.gameObject.SetActive(LevelIndex == 1);
             if (scenery != null) { scenery.gameObject.SetActive(false); Destroy(scenery.gameObject); }
             scenery = new GameObject("Level Imagery").transform;
             scenery.SetParent(transform, false);
             for (int i = 0; i < 24; i++)
             {
-                Vector2 size = LevelIndex == 0 ? new Vector2(0.65f, 0.025f)
-                    : LevelIndex == 1 ? new Vector2(0.06f, 0.13f) : new Vector2(0.7f, 0.07f);
-                Color color = LevelIndex == 0 ? new Color(0.8f, 0.9f, 1f, 0.32f)
-                    : LevelIndex == 1 ? new Color(1f, 0.65f, 0.24f, 0.65f) : new Color(0.65f, 0.91f, 1f, 0.6f);
-                Block(LevelIndex == 0 ? "Wind" : LevelIndex == 1 ? "Ember" : "Wave", scenery,
+                Vector2 size = LevelIndex == 0 ? new Vector2(0.06f, 0.06f)
+                    : LevelIndex == 1 ? new Vector2(0.65f, 0.025f) : new Vector2(0.7f, 0.07f);
+                Color color = LevelIndex == 0 ? new Color(1f, 0.96f, 0.75f, 0.7f)
+                    : LevelIndex == 1 ? new Color(0.8f, 0.9f, 1f, 0.32f) : new Color(0.85f, 0.95f, 1f, 0.6f);
+                Block(LevelIndex == 0 ? "Mote" : LevelIndex == 1 ? "Wind" : "Wave", scenery,
                     Vector2.zero, size, color, false, -2);
             }
-            if (LevelIndex == 1)
-                for (int i = 0; i < 14; i++)
+            ApplyLevelArt();
+            music.SetLevel(LevelMusic[LevelIndex]);
+        }
+
+        private void ApplyLevelArt()
+        {
+            if (backdrop != null) { backdrop.gameObject.SetActive(false); Destroy(backdrop.gameObject); }
+            backdrop = null;
+            // The background's horizon sits on the floor and its sky fills the view above it.
+            Sprite sky = PixelArt.Background(LevelIndex, arenaCamera.orthographicSize - Floor);
+            if (sky != null)
+            {
+                backdrop = new GameObject("Backdrop").transform;
+                backdrop.SetParent(transform, false);
+                float width = sky.bounds.size.x;
+                int copies = Mathf.CeilToInt(HalfWidth / width);
+                for (int i = -copies; i <= copies; i++)
                 {
-                    GameObject flame = Block("Hearth Flame", scenery, new Vector2(-HalfWidth + i * HalfWidth * 2 / 13, Floor + 0.15f),
-                        new Vector2(0.16f, 0.4f), new Color(1, 0.4f, 0.1f, 0.6f), false, -1);
-                    flame.transform.localRotation = Quaternion.Euler(0, 0, 18);
+                    SpriteRenderer tile = new GameObject("Backdrop Tile", typeof(SpriteRenderer)).GetComponent<SpriteRenderer>();
+                    tile.transform.SetParent(backdrop, false);
+                    tile.transform.localPosition = new Vector3(i * width, Floor, 0);
+                    tile.sprite = sky;
+                    tile.flipX = i % 2 != 0; // Mirror neighbours so their edges always match.
+                    tile.sortingOrder = -10;
                 }
-            music.SetLevel(LevelIndex);
+            }
+
+            groundArt.sprite = PixelArt.Ground(LevelIndex);
+            bool hasGround = groundArt.sprite != null;
+            groundArt.enabled = hasGround;
+            ground.enabled = grass.enabled = !hasGround;
+            if (hasGround)
+            {
+                // Two extra tiles of width leave room to scroll by one tile either way.
+                groundArt.size = new Vector2(HalfWidth * 2 + 4 + groundArt.sprite.bounds.size.x * 2, groundArt.sprite.bounds.size.y);
+                groundArt.transform.localPosition = new Vector3(-groundScroll, Floor, 0);
+            }
+        }
+
+        private void AnimateBird()
+        {
+            if (birdArt == null) return;
+            if (State == PlayState.GameOver || State == PlayState.AwaitingFlap)
+                birdArt.sprite = birdHurt != null ? birdHurt : birdFrames[1];
+            else if (State == PlayState.Playing)
+            {
+                int frame = Mathf.FloorToInt(Time.time * 12) % 4; // up, mid, down, mid
+                birdArt.sprite = birdFrames[frame == 3 ? 1 : frame];
+            }
+            else birdArt.sprite = birdFrames[1];
         }
 
         private void AnimateScenery()
@@ -328,17 +425,9 @@ namespace FlappyBird
             float time = Time.time;
             for (int i = 0; i < scenery.childCount; i++)
             {
-                if (LevelIndex == 1 && i >= 24)
-                {
-                    Transform flame = scenery.GetChild(i);
-                    float flicker = 0.28f + 0.15f * Mathf.Sin(time * 5 + i * 1.7f);
-                    flame.localScale = new Vector3(0.16f, flicker, 1);
-                    flame.localPosition = new Vector3(-HalfWidth + (i - 24) * HalfWidth * 2 / 13, Floor + flicker / 2, 0);
-                    continue;
-                }
-                float x = Mathf.Repeat(i * 1.73f - time * (LevelIndex == 0 ? 2.2f : 0.5f), HalfWidth * 2 + 2) - HalfWidth - 1;
-                float y = LevelIndex == 0 ? Floor + 1 + Mathf.Repeat(i * 0.71f, cameraHalfHeight - Floor - 1.5f)
-                    : LevelIndex == 1 ? Floor + Mathf.Repeat(time * 0.5f + i * 0.43f, cameraHalfHeight - Floor)
+                float x = Mathf.Repeat(i * 1.73f - time * (LevelIndex == 1 ? 2.2f : 0.5f), HalfWidth * 2 + 2) - HalfWidth - 1;
+                float y = LevelIndex == 0 ? Floor + Mathf.Repeat(time * 0.5f + i * 0.43f, cameraHalfHeight - Floor)
+                    : LevelIndex == 1 ? Floor + 1 + Mathf.Repeat(i * 0.71f, cameraHalfHeight - Floor - 1.5f)
                     : Floor + 0.2f + (i % 3) * 0.2f + Mathf.Sin(time * 1.5f + i) * 0.1f;
                 scenery.GetChild(i).localPosition = new Vector3(x, y, 0);
             }
