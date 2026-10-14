@@ -17,7 +17,7 @@ See [the framework guide](Assets/FlappyBird/README.md) for customization.
 
 ## Versions
 
-The version is shown on the title screen and the poem page. Each is tagged in git (`v1.0.0` ... `v1.5.0`).
+The version is shown on the title screen and the poem page. Each is tagged in git (`v1.0.0` ... `v1.5.1`).
 
 | Version | What changed |
 |---|---|
@@ -28,6 +28,7 @@ The version is shown on the title screen and the poem page. Each is tagged in gi
 | 1.4.0 | The nest's tree matches each world |
 | 1.4.1 | Hope never stops: no game over, score is crashes; the Gale's storm surge |
 | 1.5.0 | Smooth transitions everywhere; the tree glides in at each level; Reset Level button; rougher pipes; faster UI |
+| 1.5.1 | Skipped cutscenes fade their words out; clearer reset icon |
 
 A separate experimental version, **beta-version**, lives in the fork [flesheatingbacteria/EnglishDickisonProject1](https://github.com/flesheatingbacteria/EnglishDickisonProject1). It builds levels from the poem's form: meter, dashes and rhymes.
 

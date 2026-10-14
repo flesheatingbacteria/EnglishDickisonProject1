@@ -606,17 +606,15 @@ SCREEN_ROWS = [
 
 def reset_icon():
     """A circular arrow: back to the start of the level."""
-    img = Image.new("RGBA", (9, 9), CLEAR)
-    px = img.load()
-    for y in range(9):
-        for x in range(9):
-            d = math.hypot(x - 4, y - 4)
-            angle = math.degrees(math.atan2(4 - y, x - 4)) % 360
-            if 2.5 <= d <= 4.1 and not (20 < angle < 80):
-                px[x, y] = c("#3a1f0d")
-    for x, y in ((5, 0), (6, 0), (7, 0), (7, 1), (7, 2)):  # arrowhead
-        px[x, y] = c("#3a1f0d")
-    return img
+    return draw_map([
+        "...###.#.",
+        "..#...##.",
+        ".#...###.",
+        ".#.......",
+        ".#.....#.",
+        "..#...#..",
+        "...###...",
+    ], {"#": c("#3a1f0d")})
 
 
 def heart():
