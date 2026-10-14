@@ -14,4 +14,4 @@ For saved Inspector settings, create an empty GameObject in the scene and add **
 
 `BirdController` handles physics and collisions. `PipePair` handles movement, scoring, and cleanup. `FlappyBirdGame` handles input, spawning, state, restart, placeholder visuals, and UI. To use another scene, add the game component explicitly.
 
-The graphics and immediate-mode UI are placeholders for a future sprite/prefab and Canvas UI pass. Input supports the project's new Input System, with a compile-time fallback for projects using the legacy input manager. No package changes are required.
+The bird, pipes, ground and backgrounds use the pixel art in `Assets/Resources/DickinsonSprites`, loaded by `PixelArt`; if a file is missing, the game falls back to its placeholder blocks. The levels follow the poem's stanzas: Hope, The Gale, Extremity. See [the art guide](../../Art/README.md) to change or regenerate the art. The immediate-mode UI is still a placeholder for a future Canvas UI pass. Input supports the project's new Input System, with a compile-time fallback for projects using the legacy input manager. No package changes are required.
