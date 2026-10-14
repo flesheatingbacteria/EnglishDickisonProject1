@@ -44,7 +44,7 @@ namespace FlappyBird
         // "And sore must be the storm": over the Gale's last stretch the storm throws everything it has.
         public float StormSurge => LevelIndex == 1 && (State == PlayState.Playing || State == PlayState.GameOver || State == PlayState.AwaitingFlap)
             ? Mathf.Clamp01((LevelProgress - 0.6f) / 0.3f) : 0;
-        private float LevelProgress => (float)(Score % ObstaclesPerLevel) / ObstaclesPerLevel;
+        private float LevelProgress => (float)(Score - levelStartScore) / PipesThisLevel;
 
         private bool showingPoem;
         private float timeScaleBeforePoem = 1f;
@@ -66,7 +66,80 @@ namespace FlappyBird
 
         private const string BestKey = "FlappyBird.FewestCrashes";
         public int LevelIndex { get; private set; }
-        public const int ObstaclesPerLevel = 15;
+        // "And sings the tune without the words": in this version the poem's form builds each level.
+        // Every stressed beat of a line is one pipe, every dash is a breath (a longer gap with no
+        // pipe), lines that rhyme share a pipe colour, and the HUD loses its words level by level.
+        private sealed class VerseLine
+        {
+            public readonly string Beats, EndWord;
+            public readonly char Rhyme; // lines with the same letter rhyme; ' ' means no rhyme
+            public readonly bool Slant;
+            public VerseLine(string beats, string endWord, char rhyme, bool slant = false)
+            {
+                Beats = beats; EndWord = endWord; Rhyme = rhyme; Slant = slant;
+            }
+        }
+
+        // x = a stressed beat (a pipe), - = a dash (a breath). Common meter: four beats, then three.
+        private static readonly VerseLine[][] Verse = {
+            new[] {
+                new VerseLine("x x x -", "feathers", ' '),        // HOPE is the THING with FEATH-ers -
+                new VerseLine("x x x -", "soul", 'b'),            // that PERCH-es IN the SOUL -
+                new VerseLine("x x x x -", "words", ' '),         // and SINGS the TUNE with-OUT the WORDS -
+                new VerseLine("x x - x -", "all", 'b', true)      // and NEV-er STOPS - at ALL -
+            },
+            new[] {
+                new VerseLine("x - x x - x -", "heard", 'a'),     // and SWEET-est - IN the GALE - is HEARD -
+                new VerseLine("x x x -", "storm", 'b'),           // and SORE must BE the STORM -
+                new VerseLine("x x x x", "Bird", 'a'),            // that COULD a-BASH the LIT-tle BIRD
+                new VerseLine("x x x -", "warm", 'b', true)       // that KEPT so MAN-y WARM -
+            },
+            new[] {
+                new VerseLine("x x x x -", "land", ' '),          // i've HEARD it IN the CHILL-est LAND -
+                new VerseLine("x x x -", "Sea", 'b'),             // and ON the STRANG-est SEA -
+                new VerseLine("x - x - x x", "Extremity", 'b', true), // YET - NEV-er - IN ex-TREM-i-TY,
+                new VerseLine("x x - x", "Me", 'b')               // it ASKED a CRUMB - of ME.
+            }
+        };
+        private static readonly string[] RhymeSchemes = { "ABCB", "ABAB", "ABBB" };
+        private static readonly Color RhymeA = new Color(1f, 0.8f, 0.42f), RhymeB = new Color(0.55f, 0.84f, 1f);
+
+        private struct Beat { public int Line; public bool LineEnd; public float Gap; }
+        private readonly System.Collections.Generic.List<Beat> beats = new System.Collections.Generic.List<Beat>();
+        private int beatIndex, levelStartScore, lineShown = -1;
+        private float lineShownAt = -10;
+
+        private static int BeatsIn(int level)
+        {
+            int count = 0;
+            foreach (VerseLine line in Verse[level]) foreach (char c in line.Beats) if (c == 'x') count++;
+            return count;
+        }
+
+        public int PipesThisLevel => BeatsIn(LevelIndex);
+
+        private static Color RhymeColor(char rhyme) => rhyme == 'a' ? RhymeA : rhyme == 'b' ? RhymeB : Color.white;
+
+        // Turn the stanza into a pipe schedule: one pipe per beat, with breaths for dashes and line ends.
+        private void StartBeats()
+        {
+            beats.Clear();
+            beatIndex = 0;
+            float breath = 0;
+            VerseLine[] stanza = Verse[LevelIndex];
+            for (int l = 0; l < stanza.Length; l++)
+            {
+                string[] marks = stanza[l].Beats.Split(' ');
+                int lastBeat = System.Array.LastIndexOf(marks, "x");
+                for (int m = 0; m < marks.Length; m++)
+                {
+                    if (marks[m] == "-") { breath += 0.7f; continue; }
+                    beats.Add(new Beat { Line = l, LineEnd = m == lastBeat, Gap = 1 + breath });
+                    breath = 0;
+                }
+                if (marks[marks.Length - 1] != "-") breath += 0.5f; // a line end is a breath too
+            }
+        }
         // One level per stanza, in the poem's order.
         private static readonly string[] LevelNames = { "Hope", "The Gale", "Extremity" };
         private static readonly string[] LevelLines = {
@@ -384,10 +457,10 @@ namespace FlappyBird
             if (surge > 0) StormTurns(surge);
             ScrollWorld(CurrentSpeed);
             spawnTimer -= Time.deltaTime;
-            if (spawnTimer <= 0)
+            if (spawnTimer <= 0 && beatIndex < beats.Count)
             {
-                SpawnPipe();
-                spawnTimer = Interval;
+                SpawnPipe(beats[beatIndex++]);
+                spawnTimer = beatIndex < beats.Count ? Interval * beats[beatIndex].Gap : float.MaxValue;
             }
             if (!Bird.Recovering && (Bird.transform.position.y < Floor || Bird.transform.position.y > cameraHalfHeight)) EndRun();
         }
@@ -556,12 +629,13 @@ namespace FlappyBird
             State = PlayState.Ready;
             Energy = 100;
             pipesSpawned = 0;
+            StartBeats();
             spawnTimer = 0.8f;
         }
 
         private float Interval => Mathf.Max(0.1f, spawnInterval - 0.1f * LevelIndex);
 
-        private void SpawnPipe()
+        private void SpawnPipe(Beat beat)
         {
             // Gaps narrow as each level goes on, and every level starts tighter than the last.
             float gap = Mathf.Clamp(pipeGap - 0.25f * LevelIndex - 0.2f * LevelProgress, 1.6f, cameraHalfHeight - Floor - 1);
@@ -575,7 +649,10 @@ namespace FlappyBird
             pair.transform.SetParent(pipes, false);
             // Always enter just past the right edge of the current view.
             pair.transform.position = new Vector3(arenaCamera.orthographicSize * arenaCamera.aspect + pipeWidth, 0, 0);
-            pair.GetComponent<PipePair>().Initialize(this);
+            PipePair pipe = pair.GetComponent<PipePair>();
+            pipe.Initialize(this);
+            pipe.Line = beat.Line;
+            pipe.LineEnd = beat.LineEnd;
             float bottomEdge = middle - gap / 2;
             float topEdge = middle + gap / 2;
             Color green = LevelIndex == 0 ? new Color(0.36f, 0.66f, 0.3f)
@@ -594,6 +671,10 @@ namespace FlappyBird
                 float overhang = PixelArt.TopPipeOverhangRows / PixelArt.PixelsPerUnit;
                 PipeArt(pair.transform, topArt, screenTop, screenTop - topEdge + overhang);
                 PipeArt(pair.transform, bottomArt, Floor - 1, bottomEdge - Floor + 1);
+                // Pipes on rhyming lines share a colour, so the rhyme scheme can be seen.
+                Color tint = RhymeColor(Verse[LevelIndex][beat.Line].Rhyme);
+                foreach (SpriteRenderer art in pair.GetComponentsInChildren<SpriteRenderer>())
+                    if (art.enabled) art.color = tint;
             }
             // Added last, so hiding the placeholder blocks above can't hide the heart too.
             if (pipesSpawned % heartEvery == 0) SpawnHeart(pair.transform, middle, gap);
@@ -645,15 +726,18 @@ namespace FlappyBird
             art.sortingOrder = 3;
         }
 
-        public void AddScore()
+        public void AddScore(PipePair passed = null)
         {
             if (State != PlayState.Playing) return;
             Score++;
-            if (Score % ObstaclesPerLevel != 0) return;
+            if (passed != null && passed.LineEnd) { lineShown = passed.Line; lineShownAt = Time.unscaledTime; }
+            if (Score - levelStartScore < PipesThisLevel) return;
             if (LevelIndex < 2)
             {
                 Energy = 100; // Reaching a new stanza refills hope.
                 surgeStart = -10;
+                levelStartScore = Score;
+                lineShown = -1;
                 StartInterlude(LevelIndex + 1);
             }
             else
@@ -821,10 +905,13 @@ namespace FlappyBird
         {
             State = PlayState.Ready;
             ClearPipes();
-            Score = LevelIndex * ObstaclesPerLevel;
+            levelStartScore = 0;
+            for (int level = 0; level < LevelIndex; level++) levelStartScore += BeatsIn(level);
+            Score = levelStartScore;
             Crashes = 0;
             Energy = 100;
             pipesSpawned = 0;
+            StartBeats();
             spawnTimer = 0.8f;
             Bird.ResetBird();
             storm.ResetStorm();
@@ -896,24 +983,59 @@ namespace FlappyBird
                     PixelUi.Fill(screen, new Color(1, 1, 1, 0.45f));
             }
 
-            // Level card: name, and a bar for how far through the level you are.
+            // The words fall away as you go: all of them on level 1, fewer on 2, none on 3.
+            int words = State == PlayState.Complete ? 2 : 2 - LevelIndex;
+
+            // Level card: name, progress, and the stanza's rhyme scheme as coloured blocks.
             string levelName = LevelNames[LevelIndex].ToUpperInvariant();
-            int progress = State == PlayState.Complete ? ObstaclesPerLevel : Score % ObstaclesPerLevel;
-            Rect card = new Rect(UiMargin, UiMargin, Mathf.Max(PixelUi.TextWidth(levelName, 4), 150) + 36, 96);
+            int progress = State == PlayState.Complete ? PipesThisLevel : Score - levelStartScore;
+            Rect card = new Rect(UiMargin, UiMargin, Mathf.Max(words > 0 ? PixelUi.TextWidth(levelName, 4) : 0, 150) + 36, 96);
             PixelUi.Frame(card, "panel");
-            PixelUi.Text("LEVEL " + (LevelIndex + 1), card.x + 18, card.y + 16, 2, UiMuted);
-            PixelUi.Text($"{progress}/{ObstaclesPerLevel}", card.xMax - 18, card.y + 16, 2, UiMuted, 1);
-            PixelUi.Text(levelName, card.x + 18, card.y + 32, 4, accent);
-            Rect track = new Rect(card.x + 18, card.y + 62, card.width - 36, 9);
+            if (words == 2) PixelUi.Text("LEVEL " + (LevelIndex + 1), card.x + 18, card.y + 16, 2, UiMuted);
+            if (words > 0)
+            {
+                PixelUi.Text($"{progress}/{PipesThisLevel}", card.xMax - 18, card.y + 16, 2, UiMuted, 1);
+                PixelUi.Text(levelName, card.x + 18, card.y + 32, 4, accent);
+            }
+            Rect track = new Rect(card.x + 18, card.y + 58, card.width - 36, 6);
             PixelUi.Fill(track, new Color(0.16f, 0.15f, 0.25f));
-            PixelUi.Fill(new Rect(track.x, track.y, Mathf.Round(track.width * progress / ObstaclesPerLevel / 3) * 3, track.height), accent);
+            PixelUi.Fill(new Rect(track.x, track.y, Mathf.Round(track.width * progress / PipesThisLevel / 3) * 3, track.height), accent);
+            VerseLine[] stanza = Verse[LevelIndex];
+            int currentLine = beatIndex > 0 && State != PlayState.Complete ? beats[Mathf.Min(progress, beats.Count - 1)].Line : 0;
+            for (int l = 0; l < stanza.Length; l++)
+            {
+                Rect block = new Rect(card.x + 18 + l * 21, card.y + 72, 15, 12);
+                if (l == currentLine) PixelUi.Fill(new Rect(block.x - 3, block.y - 3, block.width + 6, block.height + 6), Color.white);
+                PixelUi.Fill(block, stanza[l].Rhyme == ' ' ? new Color(0.45f, 0.43f, 0.55f) : RhymeColor(stanza[l].Rhyme));
+            }
+            if (words == 2) PixelUi.Text(RhymeSchemes[LevelIndex], card.x + 18 + stanza.Length * 21 + 6, card.y + 74, 2, UiMuted);
 
             // The scoreboard is just your crashes; it pops (and flushes red) when one happens.
             if (Crashes != shownCrashes) { if (Crashes > shownCrashes) crashPopAt = now; shownCrashes = Crashes; }
             bool popping = now - crashPopAt < 0.2f;
             float crashSize = popping ? 9 : 8;
             PixelUi.Text(Crashes.ToString(), width / 2, UiMargin + (9 - crashSize) * 2.5f, crashSize, popping ? new Color(1f, 0.45f, 0.4f) : Color.white, 0.5f);
-            PixelUi.Text(FewestCrashes >= 0 ? $"CRASHES - FEWEST {FewestCrashes}" : "CRASHES", width / 2, UiMargin + 56, 2, UiMuted, 0.5f);
+            if (words == 2) PixelUi.Text(FewestCrashes >= 0 ? $"CRASHES - FEWEST {FewestCrashes}" : "CRASHES", width / 2, UiMargin + 56, 2, UiMuted, 0.5f);
+
+            // A finished line shows its end word in its rhyme colour - and, at first, what it rhymes with.
+            float sinceLine = now - lineShownAt;
+            if (lineShown >= 0 && sinceLine < 1.8f && State != PlayState.Interlude)
+            {
+                VerseLine line = stanza[lineShown];
+                Color tone = RhymeColor(line.Rhyme);
+                tone.a = Mathf.Clamp01((1.8f - sinceLine) / 0.4f);
+                float rise = Mathf.Round(Mathf.Clamp01(1 - sinceLine / 0.25f) * 4) * 3;
+                if (words == 0) PixelUi.Fill(new Rect(Mathf.Round(width / 2 - 60), 112 + rise, 120, 6), tone);
+                else
+                {
+                    PixelUi.Text(line.EndWord.ToUpperInvariant(), width / 2, 104 + rise, 4, tone, 0.5f);
+                    VerseLine partner = null;
+                    for (int l = 0; l < lineShown; l++) if (line.Rhyme != ' ' && stanza[l].Rhyme == line.Rhyme) partner = stanza[l];
+                    if (words == 2 && partner != null)
+                        PixelUi.Text((line.Slant ? "SLANT RHYME WITH " : "RHYMES WITH ") + partner.EndWord.ToUpperInvariant(),
+                            width / 2, 132 + rise, 2, new Color(1, 1, 1, tone.a), 0.5f);
+                }
+            }
 
             // Hope bar: drains while flying, refills from hearts, blinks red when low.
             Rect bar = new Rect(width - UiMargin - 168, UiMargin + 6, 168, 30);
@@ -933,18 +1055,23 @@ namespace FlappyBird
             float shine = trough.x + Mathf.Round(Mathf.Repeat(now * 90, trough.width + 90) / 3) * 3 - 45;
             Rect glint = Rect.MinMaxRect(Mathf.Max(fill.x, shine), fill.y, Mathf.Min(fill.xMax, shine + 6), fill.yMax);
             if (glint.width > 0 && !low) PixelUi.Fill(glint, new Color(1, 1, 1, 0.55f));
-            PixelUi.Text(Energy > 0 ? "HOPE" : "HOPE IS QUIET - FIND A HEART", bar.xMax, bar.yMax + 9, 2, low ? new Color(1f, 0.5f, 0.42f) : UiMuted, 1);
+            if (words == 2) PixelUi.Text(Energy > 0 ? "HOPE" : "HOPE IS QUIET - FIND A HEART", bar.xMax, bar.yMax + 9, 2, low ? new Color(1f, 0.5f, 0.42f) : UiMuted, 1);
             if (sinceCrash < 0.9f && lostHope > 0)
                 PixelUi.Text("-" + lostHope, bar.x + fill.width, bar.yMax + 9 + Mathf.Round(sinceCrash * 30 / 3) * 3, 3,
                     new Color(1f, 0.4f, 0.35f, 1 - sinceCrash / 0.9f), 0.5f);
 
             poemButton = new Rect(width - UiMargin - 84, UiMargin + 64, 84, 36);
-            if (Button(poemButton, "POEM", 2)) SetPoemVisible(true);
+            if (Button(poemButton, words > 0 ? "POEM" : "", 2)) SetPoemVisible(true);
+            if (words == 0)
+            {
+                Vector2 quill = PixelUi.IconSize("feather");
+                PixelUi.Icon("feather", poemButton.center.x - quill.x / 2, poemButton.center.y - quill.y / 2);
+            }
 
             // Centre messages.
             float bob = Mathf.Round(Mathf.Sin(now * 4) * 2) * 3;
             bool banner = State == PlayState.Ready || now - bannerStart < 2.6f;
-            if (banner && (State == PlayState.Ready || State == PlayState.Playing))
+            if (banner && words > 0 && (State == PlayState.Ready || State == PlayState.Playing))
             {
                 float fade = State == PlayState.Ready ? 1 : Mathf.Clamp01((2.6f - (now - bannerStart)) / 0.5f);
                 float slide = State == PlayState.Ready ? 0 : Mathf.Round(Mathf.Clamp01(1 - (now - bannerStart) / 0.25f) * 8) * 3;
@@ -953,7 +1080,7 @@ namespace FlappyBird
                 Rect panel = new Rect(0, 214 - slide, Mathf.Max(PixelUi.TextWidth(levelName, 7), PixelUi.TextWidth(line, 2)) + 60, 124);
                 panel.x = Mathf.Round((width - panel.width) / 2);
                 PixelUi.Frame(panel, "panel");
-                PixelUi.Text("LEVEL " + (LevelIndex + 1), width / 2, panel.y + 18, 2, UiMuted, 0.5f);
+                if (words == 2) PixelUi.Text("LEVEL " + (LevelIndex + 1), width / 2, panel.y + 18, 2, UiMuted, 0.5f);
                 PixelUi.Text(levelName, width / 2, panel.y + 40, 7, accent, 0.5f);
                 PixelUi.Text(line, width / 2, panel.y + 90, 2, Color.white, 0.5f);
                 GUI.color = Color.white;
@@ -968,16 +1095,23 @@ namespace FlappyBird
             }
             if (State == PlayState.Ready)
             {
-                PixelUi.Text("SPACE OR CLICK TO FLY", width / 2, 520 + bob, 3, Color.white, 0.5f);
-                PixelUi.Text("GRAB HEARTS TO KEEP YOUR HOPE UP", width / 2, 556, 2, UiMuted, 0.5f);
+                if (words > 0) PixelUi.Text("SPACE OR CLICK TO FLY", width / 2, 520 + bob, 3, Color.white, 0.5f);
+                if (words == 2) PixelUi.Text("FLY TO THE BEAT - DASHES ARE BREATHS, MATCHING COLOURS RHYME", width / 2, 556, 2, UiMuted, 0.5f);
             }
             else if (State == PlayState.GameOver || State == PlayState.AwaitingFlap)
             {
-                Rect panel = new Rect(0, 300, 372, State == PlayState.AwaitingFlap ? 96 : 66);
+                Rect panel = new Rect(0, 300, words > 0 ? 372 : 150, State == PlayState.AwaitingFlap && words > 0 ? 96 : 66);
                 panel.x = Mathf.Round((width - panel.width) / 2);
                 PixelUi.Frame(panel, "panel");
-                PixelUi.Text("HOPE KEEPS SINGING...", width / 2, panel.y + 24, 3, accent, 0.5f);
-                if (State == PlayState.AwaitingFlap && Mathf.Repeat(now, 1) < 0.7f)
+                if (words > 0) PixelUi.Text("HOPE KEEPS SINGING...", width / 2, panel.y + 24, 3, accent, 0.5f);
+                else
+                {
+                    // Without words: the song carries on as notes.
+                    Vector2 note = PixelUi.IconSize("note");
+                    for (int i = 0; i < 3; i++)
+                        PixelUi.Icon("note", width / 2 - 1.5f * note.x - 9 + i * (note.x + 9), panel.y + 33 - note.y / 2 + Mathf.Round(Mathf.Sin(now * 5 + i) * 1) * 3);
+                }
+                if (State == PlayState.AwaitingFlap && words > 0 && Mathf.Repeat(now, 1) < 0.7f)
                     PixelUi.Text("SPACE OR CLICK TO RISE AGAIN", width / 2, panel.y + 60, 2, UiMuted, 0.5f);
             }
             else if (State == PlayState.Complete)
@@ -1000,10 +1134,11 @@ namespace FlappyBird
                 float alpha = Mathf.Clamp01((t - 0.4f) / 0.4f);
                 if (ribbon.AllCaught) alpha *= Mathf.Clamp01(1 - (Time.time - ribbon.LastCatchTime - 1.2f) / 0.4f);
                 ribbon.Draw(Time.time, width, LevelAccent[interludeLevel], alpha, ToUi);
-                if (t > 0.8f) PixelUi.Text("SPACE TO SKIP", width / 2, UiHeight - UiMargin - 96, 2, UiMuted, 0.5f);
+                if (t > 0.8f && interludeLevel < 2) PixelUi.Text("SPACE TO SKIP", width / 2, UiHeight - UiMargin - 96, 2, UiMuted, 0.5f);
             }
 
-            // Credits, small, bottom right.
+            // Credits, small, bottom right (gone with the other words on the last level).
+            if (words == 0) return;
             const string poemCredit = "POEM BY EMILY DICKINSON";
             float creditWidth = Mathf.Max(PixelUi.TextWidth(poemCredit, 2), PixelUi.TextWidth(CreatorCredit, 2));
             PixelUi.Fill(new Rect(width - UiMargin - creditWidth - 9, UiHeight - UiMargin - 36, creditWidth + 18, 39),
@@ -1019,7 +1154,7 @@ namespace FlappyBird
             float bob = Mathf.Round(Mathf.Sin(now * 1.6f) * 2) * 3;
             Color gold = LevelAccent[0];
             // Title at the top, buttons at the bottom: the middle stays clear for the bird
-            // resting in its nest in the cherry tree.
+            // resting in its nest in the tree.
             PixelUi.Fill(new Rect(0, 40, width, 190), new Color(0.12f, 0.08f, 0.2f, 0.35f));
             Vector2 feather = PixelUi.IconSize("feather");
             PixelUi.Icon("feather", width / 2 - feather.x / 2, 56 + bob);

@@ -627,6 +627,7 @@ def ui_sprites():
             "......YY", ".....YWY", "....YWY.", "...YWY..", "..YWY...", ".YWY....", ".YY.....", "Y......."],
             {"Y": c("#ffd84a"), "W": c("#fff2b0")})),
         "heart": heart(),
+        "note": NOTE,
     }
     return out
 

@@ -6,6 +6,9 @@ namespace FlappyBird
     {
         private FlappyBirdGame game;
         private bool scored;
+        // Which line of the stanza this pipe's beat belongs to, and whether it ends the line.
+        public int Line = -1;
+        public bool LineEnd;
         public void Initialize(FlappyBirdGame owner) { game = owner; }
 
         private void Update()
@@ -15,7 +18,7 @@ namespace FlappyBird
             if (!scored && transform.position.x + (game.pipeWidth + 0.14f) * 0.5f < game.Bird.transform.position.x)
             {
                 scored = true;
-                game.AddScore();
+                game.AddScore(this);
             }
             if (transform.position.x < -game.HalfWidth - 2) Destroy(gameObject);
         }
