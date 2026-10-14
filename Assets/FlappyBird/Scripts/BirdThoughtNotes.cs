@@ -22,6 +22,8 @@ namespace FlappyBird
         private int lastBeat = -1;
         private int nextNote;
         private const float Lifetime = 2.4f;
+        // While resting, no new notes appear (they'd be mistaken for the boss's shots).
+        public bool Resting { get; set; }
 
         public void Initialize(Transform singer, DickinsonMusic soundtrack, Sprite square)
         {
@@ -80,7 +82,7 @@ namespace FlappyBird
         {
             if (bird == null || music == null) return;
             int beat = music.CurrentBeat;
-            if (beat >= 0 && beat != lastBeat)
+            if (beat >= 0 && beat != lastBeat && !Resting)
             {
                 Note note = notes[nextNote];
                 nextNote = (nextNote + 1) % notes.Length;

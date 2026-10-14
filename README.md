@@ -1,8 +1,10 @@
 # English Dickinson Project — beta-version
 
-> **This is the beta-version (fork).** It's the main game plus one experimental idea, "the tune without the words": the poem's *form* builds each level. Every stressed beat of a line is a pipe (so the stanzas run 13, 14 and 14 pipes in common meter's four-then-three rhythm), every dash is a breath with no pipe, pipes on rhyming lines share a colour, the level card shows each stanza's rhyme scheme (ABCB, ABAB, ABBB), and the HUD's words fall away level by level until Extremity is played with none. The main version lives at [redcappyal/EnglishDickisonProject1](https://github.com/redcappyal/EnglishDickisonProject1). It ends with a finale, **The Quiet**: after Extremity's last pipe a darkness creeps in from the left, the colour drains and the music thins to the bird's melody alone. Flap *on the beat* to send out light that pushes the dark back and writes the last stanza across the sky, a third of a line per beat (a ring pulses around the bird on every beat to fly by). When all four lines are lit, the dark breaks, the full music returns and dawn comes up over the frozen sea. There is no way to lose: the longer the dark lasts, the looser the timing gets, until any flap will do. The title screen shows **BETA-VERSION - 1.6.0**.
+> **This is the beta-version (fork).** It's the main game plus one experimental idea, "the tune without the words": the poem's *form* builds each level. Every stressed beat of a line is a pipe (so the stanzas run 13, 14 and 14 pipes in common meter's four-then-three rhythm), every dash is a breath with no pipe, pipes on rhyming lines share a colour, the level card shows each stanza's rhyme scheme (ABCB, ABAB, ABBB), and the HUD's words fall away level by level until Extremity is played with none. The main version lives at [redcappyal/EnglishDickisonProject1](https://github.com/redcappyal/EnglishDickisonProject1). It ends with a finale, **The Quiet**: after Extremity's last pipe a darkness creeps in from the left, the colour drains and the music thins to the bird's melody alone. Flap *on the beat* to send out light that pushes the dark back and writes the last stanza across the sky, a third of a line per beat (a ring pulses around the bird on every beat to fly by). When all four lines are lit, the dark breaks, the full music returns and dawn comes up over the frozen sea. There is no way to lose: the longer the dark lasts, the looser the timing gets, until any flap will do. It doesn't have main's Dickinson boss fight. The title screen shows **BETA-VERSION - 1.6.1**.
 
-A Unity 6 Flappy Bird game framework.
+**The Thing With Feathers**, a Flappy Bird game built on Emily Dickinson's "Hope" is the thing with feathers, in Unity 6.
+
+**Play this version in your browser:** https://flesheatingbacteria.github.io/EnglishDickisonProject1/beta/ (Space, click or tap to flap; **M** mutes). The main version is at https://flesheatingbacteria.github.io/EnglishDickisonProject1/.
 
 ## Run
 
@@ -13,13 +15,21 @@ A Unity 6 Flappy Bird game framework.
 
 Three levels follow the three stanzas of "Hope" is the thing with feathers: **Hope**, **The Gale** and **Extremity**, 15 pipes each. Between levels (and at the start) a cutscene flies the bird through the next stanza while the world and its weather blend into the next one.
 
+After the Gale's fifteenth pipe, a nine-second **Warmth** interlude brings out the sun over a village for "That kept so many warm -". Rain and storm clouds clear, the bird glides safely, and the music returns to the warm theme before the third stanza introduces the frozen land. Space or click continues once the storm has cleared.
+
 v 1.4.1: **Hope never stops at all.** There is no game over: after a crash the game freezes for a second, then you flap and carry on. The score is simply how many times you crashed, and your record is the **fewest crashes** in a full run. Your **hope** bar drains as you fly and each crash costs some; grab hearts (placed a little out of the way) to refill it. With no hope left the bird still flies, just with weaker wingbeats. At the end of the Gale the storm surges ("And sore must be the storm"): heavier rain, lightning, gusts that shove the bird and faster pipes, until it breaks as you leave.
+
+v 1.6.0: **The boss.** After Extremity's last pipe the world stops, the music goes quiet, and Emily Dickinson is waiting. She talks in dashes and Capitals and attacks the way a certain skeleton does: walls of dashes, blue dashes that only sting a rising bird, giant quills that fire beams, falling capital letters, and "tell it Slant" gravity flips, with black cuts between attacks. She can't be hit back; you just have to keep flying until she tires. Hits count as crashes and cost hope, but the run never ends. When she falls asleep, fly to her. Sound effects (all synthesized in code) and a mute button (or **M**) are new too.
 
 See [the framework guide](Assets/FlappyBird/README.md) for customization.
 
+## Build for the web
+
+In Unity, **Flappy Bird > Build WebGL** writes the site to `Builds/WebGL` (gzip with a built-in decompressor, so any static host works, GitHub Pages included). To check it locally, serve that folder (for example `python3 -m http.server --directory Builds/WebGL`) and open the page; opening `index.html` as a file won't work.
+
 ## Versions
 
-The version is shown on the title screen and the poem page. Each is tagged in git (`v1.0.0` ... `v1.5.1`).
+The version is shown on the title screen and the poem page. Each is tagged in git (`v1.0.0` ... `v1.6.0`).
 
 | Version | What changed |
 |---|---|
@@ -31,8 +41,10 @@ The version is shown on the title screen and the poem page. Each is tagged in gi
 | 1.4.1 | Hope never stops: no game over, score is crashes; the Gale's storm surge |
 | 1.5.0 | Smooth transitions everywhere; the tree glides in at each level; Reset Level button; rougher pipes; faster UI |
 | 1.5.1 | Skipped cutscenes fade their words out; clearer reset icon |
+| 1.6.0 | Boss fight against Emily Dickinson; sound effects; mute; WebGL build, playable online |
 | beta 1.6.0 | (beta-version only) The Quiet: a rhythm finale against the dark at the end of Extremity |
+| beta 1.6.1 | (beta-version only) Merges main 1.6.0 (Warmth, sound effects, mute, WebGL) while keeping The Quiet as the ending; on-beat flaps play notes |
 
-A separate experimental version, **beta-version**, lives in the fork [flesheatingbacteria/EnglishDickisonProject1](https://github.com/flesheatingbacteria/EnglishDickisonProject1). It builds levels from the poem's form: meter, dashes and rhymes.
+A separate experimental version, **beta-version**, lives in the fork [flesheatingbacteria/EnglishDickisonProject1](https://github.com/flesheatingbacteria/EnglishDickisonProject1) ([play it](https://flesheatingbacteria.github.io/EnglishDickisonProject1/beta/)). It builds levels from the poem's form: meter, dashes and rhymes, and ends with "The Quiet" instead of the boss.
 
 `Assets` (including `.meta` files), `Packages`, and `ProjectSettings` are versioned. Unity regenerates `Library`, `Temp`, and IDE project files locally.

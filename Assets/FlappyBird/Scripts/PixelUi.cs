@@ -99,11 +99,14 @@ namespace FlappyBird
                         Rect.MinMaxRect(us[i], vs[j + 1], us[i + 1], vs[j]));
         }
 
-        public static void Icon(string name, float x, float y, float scale = Px)
+        public static void Icon(string name, float x, float y, float scale = Px, bool flip = false)
         {
             if (!Painting) return;
             Texture2D texture = Ui(name);
-            if (texture != null) GUI.DrawTexture(new Rect(Mathf.Round(x), Mathf.Round(y), texture.width * scale, texture.height * scale), texture);
+            if (texture == null) return;
+            Rect rect = new Rect(Mathf.Round(x), Mathf.Round(y), texture.width * scale, texture.height * scale);
+            if (flip) GUI.DrawTextureWithTexCoords(rect, texture, new Rect(1, 0, -1, 1));
+            else GUI.DrawTexture(rect, texture);
         }
 
         public static Vector2 IconSize(string name, float scale = Px)

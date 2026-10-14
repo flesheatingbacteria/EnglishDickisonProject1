@@ -1,3 +1,0 @@
-[mcp_servers.unity]
-command = 'C:\Users\BunnyGamez\AppData\Local\Unity\bin\unity.exe'
-args = ['mcp', '--project-path', 'C:\Users\BunnyGamez\Desktop\Coding\Unity\EnglishDickinsonProject']
